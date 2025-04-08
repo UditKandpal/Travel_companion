@@ -20,6 +20,55 @@ import subprocess
 import sys
 import streamlit as st
 
+import os
+import subprocess
+import sys
+import streamlit as st
+
+def ensure_environment():
+    try:
+        # Install essential build tools
+        subprocess.run([
+            sys.executable, "-m", "pip", "install",
+            "--upgrade",
+            "setuptools>=65.5.1",  # Version with distutils compatibility
+            "wheel",
+            "pip"
+        ], check=True, capture_output=True)
+        
+        # Install required packages with no build isolation
+        subprocess.run([
+            sys.executable, "-m", "pip", "install",
+            "--no-build-isolation",
+            "--no-cache-dir",
+            "rich==14.0.0",
+            "markdown-it-py==3.0.0",
+            "pygments==2.19.1",
+            "mdurl==0.1.2"
+        ], check=True, capture_output=True)
+        
+        return True
+    except subprocess.CalledProcessError as e:
+        st.error(f"""
+        Environment setup failed with code {e.returncode}
+        Command: {' '.join(e.cmd)}
+        Error output: {e.stderr.decode()}
+        """)
+        return False
+
+if not ensure_environment():
+    st.error("""
+    Critical setup failed. Please run these commands manually:
+    
+    # For Ubuntu/Debian:
+    sudo apt-get install python3.12-dev python3.12-venv
+    
+    # Then:
+    python -m pip install --upgrade pip setuptools wheel
+    python -m pip install --no-build-isolation rich markdown-it-py pygments mdurl
+    """)
+    st.stop()  # Prevent app from running with broken environment
+    
 def fix_installation():
     """Ensure proper build environment exists"""
     try:
