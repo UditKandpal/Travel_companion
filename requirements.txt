@@ -6,8 +6,8 @@ speechrecognition==3.10.0
 pandas==2.0.3
 matplotlib==3.7.2
 pyttsx3==2.90
-streamlit-webrtc==0.47.7
-av==10.0.0
+streamlit-webrtc==0.45.0
+av==9.3.0
 streamlit
 setuptools<66.0.0
 pip
@@ -22,8 +22,6 @@ pygments==2.19.1
 rich==14.0.0
 # Core packages with version pins
 streamlit>=1.32.0
-streamlit-webrtc>=0.48.0
-av>=9.2.0,<10.0.0  # Python 3.12 compatible version
 setuptools>=65.5.1
 wheel>=0.40.0
 
