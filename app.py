@@ -20,6 +20,7 @@ import subprocess
 import sys
 import streamlit as st
 import requests
+import openai
 
 import os
 import subprocess
@@ -385,11 +386,12 @@ def app():
         else:
             return f"Error from LLM API: {response.status_code} - {response.text}"
 
-    def process_query_with_llm(query, context="You are a travel assistant helping users with location, recommendations, and translations. Use the provided databases LANDMARKS_DB, RESTAURANTS_DB, and TRANSLATIONS when relevant."):
-        # Combine context and user query
-        full_prompt = f"{context}\nUser query: {query}\nResponse:"
-        response = query_llm(full_prompt)
-        return response
+    def process_query_with_llm(query):
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": query}]
+        )
+        return response['choices'][0]['message']['content']
 
     # Tab 2: Voice Assistant
     with tab2:
