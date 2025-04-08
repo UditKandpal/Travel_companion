@@ -45,3 +45,6 @@ grpcio>=1.64.0
 # Video / Audio processing
 av==11.0.0
 ffmpeg-python>=0.2
+
+# For Hugging Face API integration
+requests>=2.31.0
