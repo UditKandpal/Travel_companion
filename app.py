@@ -20,50 +20,44 @@ import subprocess
 import sys
 import streamlit as st
 
-def manage_packages():
-    st.warning("Package maintenance in progress...")
+def reinstall_packages():
+    st.warning("Performing complete package reinstallation...")
     
     commands = [
-        [sys.executable, "-m", "pip", "install", "--upgrade", "pip"],
-        [sys.executable, "-m", "pip", "install", "--force-reinstall", 
-         "pygments==2.19.1", "mdurl==0.1.2", "markdown-it-py==3.0.0", "rich==14.0.0"]
+        # First clean uninstall
+        [sys.executable, "-m", "pip", "uninstall", "-y", 
+         "pygments", "mdurl", "markdown-it-py", "rich"],
+        
+        # Then fresh install
+        [sys.executable, "-m", "pip", "install", "--no-cache-dir",
+         "pygments==2.19.1", "mdurl==0.1.2", "markdown-it-py==3.0.0", "rich==14.0.0"],
+        
+        # Upgrade pip separately
+        [sys.executable, "-m", "pip", "install", "--upgrade", "pip"]
     ]
     
     for cmd in commands:
-        process = subprocess.Popen(
+        process = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            universal_newlines=True
+            text=True
         )
         
-        # Stream output in real-time
-        output_container = st.empty()
-        full_output = ""
+        # Display results
+        with st.expander(f"Command: {' '.join(cmd)}"):
+            if process.stdout:
+                st.code(process.stdout)
+            if process.stderr:
+                st.error(process.stderr)
         
-        while True:
-            output = process.stdout.readline()
-            if output == '' and process.poll() is not None:
-                break
-            if output:
-                full_output += output
-                output_container.code(full_output)
-        
-        # Check return code but don't fail on non-zero (some warnings still succeed)
-        return_code = process.poll()
-        if return_code != 0:
-            st.warning(f"Command completed with return code {return_code} (this might be okay)")
+        if process.returncode != 0:
+            st.warning(f"Command completed with code {process.returncode}")
         else:
-            st.success("Command completed successfully")
-        
-        # Show any errors
-        stderr = process.stderr.read()
-        if stderr:
-            st.error(f"Errors:\n{stderr}")
+            st.success("Success")
 
-# In your app
-if st.button("Fix Package Issues"):
-    manage_packages()
+if st.button("FULL Clean Reinstall Packages"):
+    reinstall_packages()
 
 
 # Simulated landmark database (in real app, this would be a more comprehensive database)
