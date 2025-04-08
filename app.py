@@ -412,9 +412,6 @@ def app():
         except requests.exceptions.RequestException as e:
             return f"An error occurred: {e}"
     
-    # Streamlit app
-    st.title("LLM Assistant with Together.ai 🚀")
-    
     # Text input as fallback
     text_query = st.text_input("Or type your question:")
     
