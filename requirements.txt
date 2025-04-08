@@ -1,34 +1,38 @@
-streamlit==1.23.0
+# Core packages
+streamlit==1.32.2  # Latest stable, compatible with Python 3.10
 opencv-python-headless==4.7.0.72
 pillow==9.5.0
 numpy==1.26.0
-speechrecognition==3.10.0
 pandas==2.0.3
 matplotlib==3.7.2
 pyttsx3==2.90
+speechrecognition==3.10.0
+
+# Streamlit WebRTC dependencies
 streamlit-webrtc==0.45.0
-av==9.3.0
-streamlit
-setuptools<66.0.0
-pip
-wheel
-distilutils
-transformers
+av==9.3.0  # Works well with Python 3.10
+aiortc>=1.5.0
+
+# Text processing & transformers
+transformers>=4.39.0
 huggingface_hub>=0.23.0
+
+# Rich text and terminal formatting
 rich>=14.0.0
 markdown-it-py==3.0.0
 mdurl==0.1.2
 pygments==2.19.1
-rich==14.0.0
-# Core packages with version pins
-streamlit>=1.32.0
-setuptools>=65.5.1
-wheel>=0.40.0
 
-# WebRTC dependencies
-pyav==9.2.0  # Explicit version that works with Python 3.12
-aiortc>=1.5.0
-numpy>=1.24.0
+# Build tools
+setuptools==65.5.1  # compatible version
+wheel==0.40.0
+pip>=24.0
+distutils  # Standard library, usually installed by default
 
 # Optional but recommended
-opencv-python-headless>=4.7.0
+ipywidgets
+tqdm
+scikit-learn
+h5py
+tensorboard
+notebook
