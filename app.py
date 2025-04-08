@@ -25,6 +25,7 @@ import os
 import subprocess
 import sys
 import streamlit as st
+import re
 
 
 # Simulated landmark database (in real app, this would be a more comprehensive database)
@@ -426,10 +427,48 @@ def app():
     
         return final_response
 
-    def clean_llm_response(response):
+    def clean_llm_response(response, query):
+        # Remove <think> section if present
         if "</think>" in response:
-            # Split and take the part after </think>
             response = response.split("</think>")[1].strip()
+        
+        # Check if query implies a singular "favourite" answer
+        query_lower = query.lower()
+        is_favourite_query = "favourite" in query_lower or "favorite" in query_lower or "best" in query_lower
+        
+        if is_favourite_query:
+            # Look for list-like structures (e.g., numbered items or bullet points)
+            lines = response.split("\n")
+            for line in lines:
+                # Match lines that look like a recommendation (e.g., starts with a number, bullet, or place name)
+                if re.match(r"^\d+\.|^[-*]|^[A-Za-z\s]+\(", line.strip()):
+                    # Extract the first valid recommendation
+                    place_match = re.search(r"(Taj Mahal|Jaipur|Varanasi|Goa|Kerala|Agra Fort|[A-Za-z\s]+)", line)
+                    if place_match:
+                        place = place_match.group(0).strip()
+                        # Find description in the response or use LANDMARKS_DB
+                        for l in lines:
+                            if place in l and "Why Visit" in l or "Highlights" in l:
+                                return f"My favourite place in India is {place}. {l.strip()}"
+    
+                        # Fallback to LANDMARKS_DB if no description found
+                        for key, value in LANDMARKS_DB.items():
+                            if place.lower() in key:
+                                return f"My favourite place in India is {value['name']}. {value['description']}"
+                        return f"My favourite place in India is {place}."
+            
+            # If no list detected, take the first sentence mentioning a place
+            sentences = re.split(r"[.!?]\s+", response)
+            for sentence in sentences:
+                place_match = re.search(r"(Taj Mahal|Jaipur|Varanasi|Goa|Kerala|Agra Fort|[A-Za-z\s]+)", sentence)
+                if place_match:
+                    place = place_match.group(0).strip()
+                    return f"My favourite place in India is {place}. {sentence.strip()}."
+            
+            # Default fallback if no clear place is found
+            return "My favourite place in India is the Taj Mahal. It’s a stunning white marble mausoleum in Agra."
+        
+        # For non-favourite queries, return the cleaned response as-is
         return response
 
 
@@ -451,13 +490,13 @@ def app():
                         # Process the voice command with LLM
                         query = voice_text.lower()
                         raw_response = process_query_with_llm(query)
-                        clean_response = clean_llm_response(raw_response)
+                        clean_response = clean_llm_response(raw_response, query)
                         st.write("Assistant:", clean_response)
                         
                         # Post-process LLM response for specific actions
-                        if "translate" in query.lower():
+                        if "translate" in query:
                             st.write("For translations, I’ll need a specific language. Please say something like 'Translate hello to French'.")
-                        elif "map" in response.lower() or "location" in response.lower():
+                        elif "map" in clean_response.lower() or "location" in clean_response.lower():
                             st.image("https://via.placeholder.com/600x400?text=Map+of+your+location", caption="Simulated Map")
                     
                     else:
@@ -469,13 +508,14 @@ def app():
         text_query = st.text_input("Or type your question:")
         if text_query:
             with st.spinner("Processing..."):
-                response = process_query_with_llm(text_query)
-                st.write("Assistant:", response)
+                raw_response = process_query_with_llm(text_query)
+                clean_response = clean_llm_response(raw_response, text_query)
+                st.write("Assistant:", clean_response)
                 
                 # Post-process LLM response for specific actions
                 if "translate" in text_query.lower():
                     st.write("For translations, I’ll need a specific language. Please type something like 'Translate hello to French'.")
-                elif "map" in response.lower() or "location" in response.lower():
+                elif "map" in clean_response.lower() or "location" in clean_response.lower():
                     st.image("https://via.placeholder.com/600x400?text=Map+of+your+location", caption="Simulated Map")
     
     # # Tab 2: Voice Assistant
