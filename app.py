@@ -22,7 +22,7 @@ import streamlit as st
 import requests
 from openai import OpenAI
 
-client=OpenAI(api_key="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")
+client=OpenAI(api_key="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")
 
 import os
 import subprocess
