@@ -53,5 +53,6 @@ SpeechRecognition
 pyttsx3
 openai
 requests
-Pyaudio
+PyAudio==0.2.14
+
 
