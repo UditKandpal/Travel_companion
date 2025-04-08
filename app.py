@@ -426,6 +426,12 @@ def app():
     
         return final_response
 
+    def clean_llm_response(response):
+        if "</think>" in response:
+            # Split and take the part after </think>
+            response = response.split("</think>")[1].strip()
+        return response
+
 
 
 
@@ -444,8 +450,9 @@ def app():
                         
                         # Process the voice command with LLM
                         query = voice_text.lower()
-                        response = process_query_with_llm(query)
-                        st.write("Assistant:", response)
+                        raw_response = process_query_with_llm(query)
+                        clean_response = clean_llm_response(raw_response)
+                        st.write("Assistant:", clean_response)
                         
                         # Post-process LLM response for specific actions
                         if "translate" in query.lower():
