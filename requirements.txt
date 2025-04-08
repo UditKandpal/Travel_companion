@@ -1,21 +1,21 @@
-# Ensure latest pip
-pip==25.0.1
-setuptools==65.5.1
-wheel==0.40.0
+# Upgrade pip first
+pip>=25.0.1
+setuptools>=65.5.1
+wheel>=0.40.0
 
 # Core packages
 streamlit==1.32.2
-opencv-python-headless==4.7.0.72
+opencv-python-headless>=4.7.0
 pillow==9.5.0
-numpy==1.26.0
+numpy>=1.24.0
 pandas==2.0.3
 matplotlib==3.7.2
 pyttsx3==2.90
 speechrecognition==3.10.0
 
-# Streamlit WebRTC dependencies
+# Streamlit WebRTC dependencies (Python 3.12 compatible)
 streamlit-webrtc==0.45.0
-av==9.3.0
+av==10.0.0
 aiortc>=1.5.0
 
 # Transformers and NLP
