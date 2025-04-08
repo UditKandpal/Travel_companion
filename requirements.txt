@@ -20,4 +20,17 @@ markdown-it-py==3.0.0
 mdurl==0.1.2
 pygments==2.19.1
 rich==14.0.0
+# Core packages with version pins
+streamlit>=1.32.0
+streamlit-webrtc>=0.48.0
+av>=9.2.0,<10.0.0  # Python 3.12 compatible version
+setuptools>=65.5.1
+wheel>=0.40.0
 
+# WebRTC dependencies
+pyav==9.2.0  # Explicit version that works with Python 3.12
+aiortc>=1.5.0
+numpy>=1.24.0
+
+# Optional but recommended
+opencv-python-headless>=4.7.0
