@@ -23,6 +23,7 @@ def install_or_update_packages():
     try:
         # Update pip first
         subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], check=True)
+        pip install --upgrade pip
         
         # Install/update required packages
         packages = ["pygments==2.19.1", "mdurl==0.1.2", "markdown-it-py==3.0.0", "rich==14.0.0"]
@@ -35,7 +36,7 @@ def install_or_update_packages():
 # Call the function (you might want to put this behind a button)
 install_or_update_packages()
 
-pip install --upgrade pip
+
 
 # Simulated landmark database (in real app, this would be a more comprehensive database)
 LANDMARKS_DB = {
