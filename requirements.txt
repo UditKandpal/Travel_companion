@@ -1,37 +1,47 @@
-# Upgrade pip first
-pip>=25.0.1
-setuptools>=65.5.1
-wheel>=0.40.0
+# Core libraries
+numpy>=1.26.4
+pandas>=2.2.2
+scipy>=1.13.0
+opencv-python>=4.9.0.80
+scikit-learn>=1.4.2
+matplotlib>=3.8.4
+seaborn>=0.13.2
+tqdm>=4.66.2
+pillow>=10.2.0
 
-# Core packages
-streamlit==1.32.2
-opencv-python-headless>=4.7.0
-pillow==9.5.0
-numpy>=1.24.0
-pandas==2.0.3
-matplotlib==3.7.2
-pyttsx3==2.90
-speechrecognition==3.10.0
+# PyTorch & Vision
+torch>=2.2.2
+torchvision>=0.17.2
 
-# Streamlit WebRTC dependencies (Python 3.12 compatible)
-streamlit-webrtc==0.45.0
-av==10.0.0
-aiortc>=1.5.0
+# For COCO dataset support
+pycocotools>=2.0.7
 
-# Transformers and NLP
-transformers>=4.39.0
-huggingface_hub>=0.23.0
+# Data handling
+pyyaml>=6.0.1
+protobuf>=5.26.1
+Cython>=3.0.10
 
-# Rich text and formatting
-rich==14.0.0
-markdown-it-py==3.0.0
-mdurl==0.1.2
-pygments==2.19.1
+# Logging and utilities
+loguru>=0.7.2
+tqdm>=4.66.2
 
-# Optional but recommended
-ipywidgets
-tqdm
-scikit-learn
-h5py
-tensorboard
-notebook
+# Streamlit for web apps
+streamlit>=1.33.0
+
+# MongoDB (since you're using MongoDB for tweets)
+pymongo>=4.7.1
+
+# NLP tools
+transformers>=4.40.0
+sentence-transformers>=2.6.1
+
+# Graph utilities
+networkx>=3.3
+
+# Tensorboard
+tensorboard>=2.16.2
+grpcio>=1.64.0
+
+# Video / Audio processing (PyAV & ffmpeg-python)
+av==11.0.0
+ffmpeg-python>=0.2.0
