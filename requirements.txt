@@ -8,4 +8,8 @@ matplotlib==3.7.2
 pyttsx3==2.90
 streamlit-webrtc==0.47.7
 av==10.0.0
+streamlit
 setuptools<66.0.0
+pip
+wheel
+
