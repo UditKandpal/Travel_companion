@@ -23,7 +23,6 @@ Cython>=3.0.10
 
 # Logging and utilities
 loguru>=0.7.2
-tqdm>=4.66.2
 
 # Streamlit for web apps
 streamlit>=1.33.0
@@ -46,5 +45,6 @@ grpcio>=1.64.0
 av==11.0.0
 ffmpeg-python>=0.2.0
 
-# Speech recognition
-SpeechRecognition>=3
+# Speech recognition and synthesis
+SpeechRecognition>=3.10.1
+pyttsx3>=2.90
