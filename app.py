@@ -20,7 +20,9 @@ import subprocess
 import sys
 import streamlit as st
 import requests
-import openai
+from openai import OpenAI
+
+client=OpenAI()
 
 import os
 import subprocess
@@ -387,11 +389,15 @@ def app():
             return f"Error from LLM API: {response.status_code} - {response.text}"
 
     def process_query_with_llm(query):
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": query}]
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": query},
+            ]
         )
-        return response['choices'][0]['message']['content']
+        return response.choices[0].message.content
+
 
     # Tab 2: Voice Assistant
     with tab2:
