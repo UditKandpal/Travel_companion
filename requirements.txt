@@ -48,3 +48,5 @@ ffmpeg-python>=0.2
 
 # For Hugging Face API integration
 requests>=2.31.0
+
+SpeechRecognition
