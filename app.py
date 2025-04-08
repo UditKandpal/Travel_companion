@@ -387,7 +387,7 @@ def app():
     
     # Function to process query with Together.ai LLM
     def process_query_with_llm(prompt):
-        api_key = "96d1c9e03238b5cb16e94f0183ea37f407761741dc53fadb514257a6732eae04"  # Replace with your actual API key
+        api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"  # Replace with your actual API key
         model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
         url = "https://api.together.xyz/v1/chat/completions"
     
