@@ -28,7 +28,7 @@ tqdm>=4.66.2
 # Streamlit for web apps
 streamlit>=1.33.0
 
-# MongoDB (since you're using MongoDB for tweets)
+# MongoDB
 pymongo>=4.7.1
 
 # NLP tools
@@ -42,6 +42,9 @@ networkx>=3.3
 tensorboard>=2.16.2
 grpcio>=1.64.0
 
-# Video / Audio processing (PyAV & ffmpeg-python)
+# Video / Audio processing
 av==11.0.0
 ffmpeg-python>=0.2.0
+
+# Speech recognition
+SpeechRecognition>=3
