@@ -389,14 +389,19 @@ def app():
             return f"Error from LLM API: {response.status_code} - {response.text}"
 
     def process_query_with_llm(query):
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": query},
-            ]
-        )
-        return response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": query},
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Error in LLM call: {e}")
+            raise e  # Optional: re-raise if you want it to crash
+
 
 
     # Tab 2: Voice Assistant
