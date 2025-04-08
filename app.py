@@ -386,7 +386,12 @@ def app():
             return f"Error from LLM API: {response.status_code} - {response.text}"
     
     # Function to process query with Together.ai LLM
-    def process_query_with_llm(prompt):
+
+    def process_query_with_llm(query, context="You are a travel assistant helping users with location, recommendations, and translations. Use the provided databases LANDMARKS_DB, RESTAURANTS_DB, and TRANSLATIONS when relevant."):
+        # Prepare the prompt
+        full_prompt = f"{context}\nUser query: {query}\nResponse:"
+    
+        # Together API setup
         api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"  # Replace with your actual API key
         model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
         url = "https://api.together.xyz/v1/chat/completions"
@@ -396,35 +401,31 @@ def app():
             "Content-Type": "application/json"
         }
     
-        payload = {
+        data = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": context},
+                {"role": "user", "content": query}
             ],
             "temperature": 0.7
         }
     
         try:
-            response = requests.post(url, headers=headers, json=payload)
-            response.raise_for_status()  # Raise error for bad status
-            return response.json()["choices"][0]["message"]["content"]
-        except requests.exceptions.RequestException as e:
-            return f"An error occurred: {e}"
+            response = requests.post(url, headers=headers, json=data)
+            response.raise_for_status()  # Raise error if not 200
+            result = response.json()
     
-    # Text input as fallback
-    text_query = st.text_input("Or type your question:")
+            # Extract the generated text
+            if result and "choices" in result and len(result["choices"]) > 0:
+                final_response = result["choices"][0]["message"]["content"].strip()
+            else:
+                final_response = "Sorry, I couldn't process your request at the moment."
     
-    if text_query:
-        with st.spinner("Processing..."):
-            response = process_query_with_llm(text_query)
-            st.write("Assistant:", response)
-            
-            # Post-process LLM response for specific actions
-            if "translate" in text_query.lower():
-                st.write("For translations, I’ll need a specific language. Please type something like 'Translate hello to French'.")
-            elif "map" in response.lower() or "location" in response.lower():
-                st.image("https://via.placeholder.com/600x400?text=Map+of+your+location", caption="Simulated Map")
+        except Exception as e:
+            final_response = f"Error communicating with the language model: {str(e)}"
+    
+        return final_response
+
 
 
 
