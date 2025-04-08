@@ -50,3 +50,5 @@ ffmpeg-python>=0.2
 requests>=2.31.0
 
 SpeechRecognition
+pyttsx3
+
