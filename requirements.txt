@@ -51,4 +51,5 @@ requests>=2.31.0
 
 SpeechRecognition
 pyttsx3
+openai
 
