@@ -35,6 +35,8 @@ def install_or_update_packages():
 # Call the function (you might want to put this behind a button)
 install_or_update_packages()
 
+pip install --upgrade pip
+
 # Simulated landmark database (in real app, this would be a more comprehensive database)
 LANDMARKS_DB = {
     "eiffel_tower": {
