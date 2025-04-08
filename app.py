@@ -20,44 +20,40 @@ import subprocess
 import sys
 import streamlit as st
 
-def reinstall_packages():
-    st.warning("Performing complete package reinstallation...")
-    
-    commands = [
-        # First clean uninstall
-        [sys.executable, "-m", "pip", "uninstall", "-y", 
-         "pygments", "mdurl", "markdown-it-py", "rich"],
+def ensure_dependencies():
+    try:
+        # First ensure distutils is available
+        subprocess.run([sys.executable, "-m", "ensurepip", "--upgrade"], check=True)
+        subprocess.run([sys.executable, "-m", "pip", "install", "setuptools"], check=True)
         
-        # Then fresh install
-        [sys.executable, "-m", "pip", "install", "--no-cache-dir",
-         "pygments==2.19.1", "mdurl==0.1.2", "markdown-it-py==3.0.0", "rich==14.0.0"],
+        # Install with --no-build-isolation to avoid the build environment issue
+        subprocess.run([
+            sys.executable, "-m", "pip", "install",
+            "--no-build-isolation",
+            "--no-cache-dir",
+            "rich==14.0.0",
+            "markdown-it-py==3.0.0",
+            "pygments==2.19.1",
+            "mdurl==0.1.2"
+        ], check=True)
         
-        # Upgrade pip separately
-        [sys.executable, "-m", "pip", "install", "--upgrade", "pip"]
-    ]
-    
-    for cmd in commands:
-        process = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # Display results
-        with st.expander(f"Command: {' '.join(cmd)}"):
-            if process.stdout:
-                st.code(process.stdout)
-            if process.stderr:
-                st.error(process.stderr)
-        
-        if process.returncode != 0:
-            st.warning(f"Command completed with code {process.returncode}")
-        else:
-            st.success("Success")
+        return True
+    except subprocess.CalledProcessError as e:
+        st.error(f"Installation failed: {e}")
+        return False
 
-if st.button("FULL Clean Reinstall Packages"):
-    reinstall_packages()
+# In your main app
+if not ensure_dependencies():
+    st.warning("""
+    Required packages couldn't be automatically installed.
+    Please run manually in your terminal:
+    ```bash
+    sudo apt-get install python3-distutils python3-dev
+    pip install --no-build-isolation rich markdown-it-py pygments mdurl
+    ```
+    """)
+else:
+    st.success("All dependencies are ready!")
 
 
 # Simulated landmark database (in real app, this would be a more comprehensive database)
