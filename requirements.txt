@@ -12,4 +12,7 @@ streamlit
 setuptools<66.0.0
 pip
 wheel
+distilutils>=0.3.0
+huggingface_hub>=0.23.0
+rich>=14.0.0
 
