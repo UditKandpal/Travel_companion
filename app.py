@@ -20,9 +20,6 @@ import subprocess
 import sys
 import streamlit as st
 import requests
-from openai import OpenAI
-
-client=OpenAI(api_key="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")
 
 import os
 import subprocess
@@ -387,20 +384,51 @@ def app():
             return result[0]["generated_text"] if isinstance(result, list) else result.get("generated_text", "Sorry, I couldn’t process that.")
         else:
             return f"Error from LLM API: {response.status_code} - {response.text}"
-
-    def process_query_with_llm(query):
+    
+    # Function to process query with Together.ai LLM
+    def process_query_with_llm(prompt):
+        api_key = "YOUR_API_KEY"  # Replace with your actual API key
+        model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
+        url = "https://api.together.xyz/v1/chat/completions"
+    
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+    
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
+    
         try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": query},
-                ]
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            print(f"Error in LLM call: {e}")
-            raise e  # Optional: re-raise if you want it to crash
+            response = requests.post(url, headers=headers, json=payload)
+            response.raise_for_status()  # Raise error for bad status
+            return response.json()["choices"][0]["message"]["content"]
+        except requests.exceptions.RequestException as e:
+            return f"An error occurred: {e}"
+    
+    # Streamlit app
+    st.title("LLM Assistant with Together.ai 🚀")
+    
+    # Text input as fallback
+    text_query = st.text_input("Or type your question:")
+    
+    if text_query:
+        with st.spinner("Processing..."):
+            response = process_query_with_llm(text_query)
+            st.write("Assistant:", response)
+            
+            # Post-process LLM response for specific actions
+            if "translate" in text_query.lower():
+                st.write("For translations, I’ll need a specific language. Please type something like 'Translate hello to French'.")
+            elif "map" in response.lower() or "location" in response.lower():
+                st.image("https://via.placeholder.com/600x400?text=Map+of+your+location", caption="Simulated Map")
+
 
 
 
