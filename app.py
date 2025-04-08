@@ -20,6 +20,47 @@ import subprocess
 import sys
 import streamlit as st
 
+def fix_installation():
+    """Ensure proper build environment exists"""
+    try:
+        # Install essential build dependencies
+        subprocess.run([
+            sys.executable, "-m", "pip", "install",
+            "--upgrade",
+            "setuptools",
+            "wheel",
+            "pip"
+        ], check=True)
+        
+        # Install packages with build isolation disabled
+        subprocess.run([
+            sys.executable, "-m", "pip", "install",
+            "--no-build-isolation",
+            "--no-cache-dir",
+            "rich==14.0.0",
+            "markdown-it-py==3.0.0",
+            "pygments==2.19.1",
+            "mdurl==0.1.2"
+        ], check=True)
+        
+        return True
+    except subprocess.CalledProcessError as e:
+        st.error(f"Installation failed: {e}")
+        return False
+
+# Check and fix on app startup
+if not fix_installation():
+    st.error("""
+    Critical dependencies failed to install. Please run manually:
+    
+    For Ubuntu/Debian:
+    ```bash
+    sudo apt-get install python3.12-dev python3.12-distutils
+    pip install --no-build-isolation rich markdown-it-py pygments mdurl
+    ```
+    """)
+    st.stop() 
+    
 def ensure_dependencies():
     try:
         # First ensure distutils is available
