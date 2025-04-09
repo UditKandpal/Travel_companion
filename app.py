@@ -172,40 +172,53 @@ class VideoProcessor(VideoProcessorBase):
         return img
 
 def process_image(image):
-    # Convert PIL image to numpy array
+    # Convert the PIL image to a numpy array
     img_array = np.array(image)
 
-    # Run model prediction
-    results = model(img_array)  # model is assumed to be loaded globally
+    # Perform inference using your model
+    results = model(img_array)
 
-    # Take the first result (for single image inference)
+    # Get the first result (since results is a list-like object)
     result = results[0]
 
-    # Prepare to draw boxes
+    # Prepare to draw on the image
     draw = ImageDraw.Draw(image)
+
+    # Initialize detected landmark as None
     detected = None
 
-    # Iterate over detected boxes
-    if result.boxes is not None and result.boxes.xyxy is not None:
-        for det in result.boxes.xyxy:
-            # det is a tensor, convert to numpy
-            det = det.cpu().numpy()
-            x_min, y_min, x_max, y_max = det[:4]
-            confidence = det[4]
-            class_id = int(det[5])
-            
-            class_name = model.names[class_id]
-            detected = class_name  # For now, take the last detected class
+    # Check if boxes exist
+    if result.boxes is not None and result.boxes.data is not None:
+        # Convert detection data to numpy for easy unpacking
+        detections = result.boxes.data.cpu().numpy()
+
+        # Loop through each detection
+        for det in detections:
+            x_min, y_min, x_max, y_max, confidence, class_id = det
+
+            # Get class name from the model
+            class_name = model.names[int(class_id)]
+            detected = class_name  # Assign the detected class
 
             # Draw bounding box
-            draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=3)
+            draw.rectangle(
+                [x_min, y_min, x_max, y_max],
+                outline="red",
+                width=3
+            )
 
-            # Draw label
-            draw.text((x_min, y_min - 10), f"{class_name} {confidence:.2f}", fill="red")
+            # Draw label and confidence
+            draw.text(
+                (x_min, max(y_min - 10, 0)),
+                f"{class_name} {confidence:.2f}",
+                fill="red"
+            )
     else:
         print("No detections found.")
 
+    # Return the annotated image and the detected class name
     return image, detected
+
 
 
 
