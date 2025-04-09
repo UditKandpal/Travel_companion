@@ -123,88 +123,68 @@ user_preferences = {
 class VideoProcessor(VideoTransformerBase):
     def __init__(self):
         self.landmark_detected = None
-        # Load pretrained YOLOv5 model
-        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
-        # Set confidence threshold
-        self.model.conf = 0.5
-        # Optional: Set device - CPU or GPU
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.model.to(self.device)
-        # Set to evaluation mode
-        self.model.eval()
-        # Define allowed classes for monuments
-        self.allowed_classes = ['cathedral', 'castle', 'church', 'building', 'tower']
+        # Load pretrained YOLOv8 (replace with v5 if preferred but v8 is latest)
+        self.model = YOLO("yolov8n.pt")  # small model for speed
+        self.model.fuse()  # fuse layers for faster inference
 
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
-
-        # YOLOv5 detection
-        results = self.model(img)
+        
+        # Run detection
+        results = self.model(img, verbose=False)
 
         # Process results
-        detections = results.xyxy[0].cpu().numpy()
-
-        # Draw bounding boxes for allowed objects
-        for detection in detections:
-            x1, y1, x2, y2, conf, cls = detection
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-
-            # Get class label
-            label = self.model.names[int(cls)]
-
-            # Filter only allowed classes
-            if label.lower() in self.allowed_classes:
-                # Store the detected landmark
-                self.landmark_detected = label
+        annotated_frame = img.copy()
+        for result in results:
+            for box in result.boxes:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                conf = box.conf[0]
+                cls = int(box.cls[0])
+                label = self.model.names[cls]
 
                 # Draw rectangle and label
-                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(img, f"{label} {conf:.2f}", (x1, y1 - 10),
+                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(annotated_frame, f"{label} {conf:.2f}", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
-        return img
+                # Store the detected label
+                self.landmark_detected = label
 
+        return annotated_frame
 
+# Single image processor
 def process_image(image):
-    """Process uploaded image for landmark detection using YOLOv5"""
+    """Process uploaded image for landmark detection using YOLO"""
     # Convert PIL image to numpy array if needed
     if not isinstance(image, np.ndarray):
         img_array = np.array(image)
     else:
         img_array = image
 
-    # Load YOLOv5 model
-    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
-    model.conf = 0.5
-
-    # Define allowed classes for monuments
-    allowed_classes = ['cathedral', 'castle', 'church', 'building', 'tower']
+    # Load YOLO model
+    model = YOLO("yolov8n.pt")
+    model.fuse()
 
     # Run detection
-    results = model(img_array)
+    results = model(img_array, verbose=False)
 
-    # Process results
-    detections = results.xyxy[0].cpu().numpy()
-
-    # Draw bounding boxes and return the first detected allowed object
+    # Draw bounding boxes and return the first detected object
     detected = None
-    for detection in detections:
-        x1, y1, x2, y2, conf, cls = detection
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-
-        # Get class label
-        label = model.names[int(cls)]
-
-        # Filter only allowed classes
-        if label.lower() in allowed_classes:
+    annotated_image = img_array.copy()
+    for result in results:
+        for box in result.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            conf = box.conf[0]
+            cls = int(box.cls[0])
+            label = model.names[cls]
             detected = label
 
             # Draw rectangle and label
-            cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(img_array, f"{label} {conf:.2f}", (x1, y1 - 10),
+            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(annotated_image, f"{label} {conf:.2f}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
 
-    return img_array, detected
+    return annotated_image, detected
 
 
 
