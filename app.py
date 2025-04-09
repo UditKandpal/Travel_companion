@@ -237,19 +237,21 @@ def get_recommendations(landmark_key, preferences=None):
     }
 
 def listen_to_voice():
-    """Capture and process voice input"""
-    r = sr.Recognizer()
+    recognizer = sr.Recognizer()
     with sr.Microphone() as source:
+        st.write("Adjusting for ambient noise... Please wait.")
+        recognizer.adjust_for_ambient_noise(source, duration=1)  # Adjust for background noise
         st.write("Listening...")
-        audio = r.listen(source)
-        
+        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)  # 5s timeout, 10s max phrase
     try:
-        text = r.recognize_google(audio)
+        text = recognizer.recognize_google(audio)
         return text
     except sr.UnknownValueError:
         return "Could not understand audio"
-    except sr.RequestError:
-        return "Could not request results"
+    except sr.RequestError as e:
+        return f"Could not request results; {str(e)}"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 def app():
     st.title("Smart Travel Companion")
