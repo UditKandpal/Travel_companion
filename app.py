@@ -122,64 +122,28 @@ user_preferences = {
 
 class VideoProcessor(VideoTransformerBase):
     def _init_(self):
-        self.monument_detected = None
+        self.landmark_detected = None
         
-        # Option 1: Load a custom YOLOv5 model fine-tuned on monuments
-        # You would need to train this model or find a pre-trained one
-        # self.model = torch.hub.load('ultralytics/yolov5', 'custom', path='path/to/monument_model.pt')
-        
-        # Option 2: Use a general YOLOv5 model and filter for building-like classes
+        # Load pretrained YOLOv5 model
         self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
         self.model.conf = 0.4  # Lower confidence threshold for detection
         
-        # Classes from COCO that might represent monuments or buildings
+        # Classes from COCO that might represent landmarks/monuments
         # 11: 'stop sign', 12: 'parking meter', 13: 'bench'
-        # 63: 'dining table' (might detect large flat surfaces)
-        # These are just examples; actual monument detection would need a custom model
-        self.building_classes = [11, 12, 13, 63]
+        # 63: 'dining table', 1: 'person' (for scale reference)
+        # These are approximations - a custom model would be better
+        self.landmark_classes = [11, 12, 13, 63, 1]
         
-        # Database of monuments with coordinates and information
-        # In a real application, this would be more comprehensive
-        self.MONUMENT_DB = {
-            "Eiffel Tower": {
-                "name": "Eiffel Tower",
-                "location": "Paris, France",
-                "info": "Iconic iron tower built in 1889"
-            },
-            "Statue of Liberty": {
-                "name": "Statue of Liberty",
-                "location": "New York, USA",
-                "info": "Neoclassical monument gifted by France"
-            },
-            "Taj Mahal": {
-                "name": "Taj Mahal",
-                "location": "Agra, India",
-                "info": "Ivory-white marble mausoleum"
-            },
-            "Colosseum": {
-                "name": "Colosseum",
-                "location": "Rome, Italy",
-                "info": "Ancient Roman amphitheater"
-            },
-            "Great Wall": {
-                "name": "Great Wall of China",
-                "location": "China",
-                "info": "Series of fortifications built across northern China"
-            }
-        }
-        
+        # Set device - CPU or GPU
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model.to(self.device)
         
-    def match_monument(self, img):
-        """
-        In a real application, you'd use feature matching or a dedicated
-        landmark recognition model here. This is a placeholder.
-        """
-        import random
-        monuments = list(self.MONUMENT_DB.keys())
-        # In real app: use a monument classifier or feature matching
-        return random.choice(monuments)
+    def match_landmark(self, img_section=None):
+        """Match detected object with a landmark from the database"""
+        # In a real application, this would use feature matching or a dedicated model
+        # For now, we'll randomly select from our database
+        landmarks = list(LANDMARKS_DB.keys())
+        return random.choice(landmarks)
         
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
@@ -190,45 +154,42 @@ class VideoProcessor(VideoTransformerBase):
         # Process results
         detections = results.xyxy[0].cpu().numpy()
         
-        monument_detected = False
-        
-        # Draw bounding boxes for detected objects
+        # Draw bounding boxes for detected objects that could be landmarks
         for detection in detections:
             x1, y1, x2, y2, conf, cls = detection
             class_id = int(cls)
             
-            # For Option 1 (custom model): just display all detections
-            # For Option 2: filter for building-like classes
-            if class_id in self.building_classes:
+            # Filter for potential landmark classes
+            if class_id in self.landmark_classes:
                 x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
                 
-                # Attempt to identify the specific monument
-                if not monument_detected:
-                    monument_name = self.match_monument(img[y1:y2, x1:x2])
-                    self.monument_detected = monument_name
-                    monument_detected = True
+                # Identify which landmark it might be
+                landmark_name = self.match_landmark(img[y1:y2, x1:x2])
+                self.landmark_detected = landmark_name
                 
-                # Get monument info
-                monument_info = self.MONUMENT_DB.get(self.monument_detected, {"name": "Unknown Monument"})
-                
-                # Draw rectangle and monument info
+                # Draw rectangle and label
                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(img, monument_info["name"], (x1, y1 - 30), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                cv2.putText(img, monument_info.get("location", ""), (x1, y1 - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (36, 255, 12), 2)
+                cv2.putText(img, LANDMARKS_DB[landmark_name]["name"], 
+                           (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                
+                # Optional: Add more info if desired
+                # cv2.putText(img, LANDMARKS_DB[landmark_name].get("location", ""), 
+                #            (x1, y1 + int(y2-y1) + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (36, 255, 12), 2)
+                
+                # Just use the first potential landmark detected
+                break
         
         return img
 
 def process_image(image):
-    """Process uploaded image for monument detection"""
+    """Process uploaded image for landmark detection"""
     # Convert PIL image to numpy array if needed
     if not isinstance(image, np.ndarray):
         img_array = np.array(image)
     else:
         img_array = image
     
-    # Create detector instance
+    # Create a VideoProcessor instance
     detector = VideoProcessor()
     
     # Create a dummy frame object with the image
@@ -239,8 +200,8 @@ def process_image(image):
     # Use the transform method to process the image
     processed_img = detector.transform(Frame())
     
-    return processed_img, detector.monument_detected
-
+    # Return the processed image and the detected landmark
+    return processed_img, detector.landmark_detected
 
 
 
