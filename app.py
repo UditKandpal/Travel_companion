@@ -8,7 +8,7 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 import pyttsx3
-from PIL import Image
+from PIL import Image, ImageDraw
 import io
 import base64
 from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, AudioProcessorBase
@@ -172,47 +172,40 @@ class VideoProcessor(VideoProcessorBase):
         return img
 
 def process_image(image):
-    from ultralytics import YOLO
-    import torch
-    import cv2
-    import numpy as np
+    # Convert PIL image to numpy array
+    img_array = np.array(image)
 
-    # Load model
-    model = YOLO("yolov5su.pt")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[INFO] Using device: {device}")
+    # Run model prediction
+    results = model(img_array)  # model is assumed to be loaded globally
 
-    # Class to landmark mapping
-    class_to_landmark = {
-        "building": "taj_mahal",  # Adjust as per your classes
-    }
+    # Take the first result (for single image inference)
+    result = results[0]
 
-    # Convert PIL image to numpy array if needed
-    if not isinstance(image, np.ndarray):
-        img_array = np.array(image)
+    # Prepare to draw boxes
+    draw = ImageDraw.Draw(image)
+    detected = None
 
-    results = model(img_array)[0]  # Get first result from the list
-    detected = "unknown"
-
-    # Draw results
-    if results.boxes is not None:
-        for box in results.boxes:
-            x_min, y_min, x_max, y_max = box.xyxy[0].cpu().numpy()
-            confidence = box.conf[0].cpu().numpy()
-            class_id = int(box.cls[0].cpu().numpy())
+    # Iterate over detected boxes
+    if result.boxes is not None and result.boxes.xyxy is not None:
+        for det in result.boxes.xyxy:
+            # det is a tensor, convert to numpy
+            det = det.cpu().numpy()
+            x_min, y_min, x_max, y_max = det[:4]
+            confidence = det[4]
+            class_id = int(det[5])
+            
             class_name = model.names[class_id]
+            detected = class_name  # For now, take the last detected class
 
-            print(f"[INFO] Detected {class_name} with confidence {confidence:.2f}")
+            # Draw bounding box
+            draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=3)
 
-            if class_name in class_to_landmark:
-                detected = class_to_landmark[class_name]
+            # Draw label
+            draw.text((x_min, y_min - 10), f"{class_name} {confidence:.2f}", fill="red")
+    else:
+        print("No detections found.")
 
-            # Draw rectangle
-            cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (255, 0, 0), 2)
-            cv2.putText(img_array, f"{class_name} {confidence:.2f}", (int(x_min), int(y_min - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
-
-    return img_array, detected
+    return image, detected
 
 
 
