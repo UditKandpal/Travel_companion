@@ -486,6 +486,36 @@ def app():
         # Fallback: return the raw response trimmed of fluff
         return re.sub(r"^(Translation:|Translated text:)", "", response).strip()
 
+    def translate_with_deepseek(text, target_lang):
+        # Together AI DeepSeek API setup
+        api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"
+        model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
+        url = "https://api.together.xyz/v1/chat/completions"
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        context = "You are a translation assistant. Translate the user's text into the specified language and provide only the translated text."
+        query = f"Translate '{text}' from English to {target_lang}"
+        
+        data = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": context},
+                {"role": "user", "content": query}
+            ],
+            "temperature": 0.7
+        }
+        
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            result = response.json()
+            if "choices" in result and result["choices"]:
+                return result["choices"][0]["message"]["content"].strip()
+        return "Translation error"
+
 
 
 
@@ -662,21 +692,13 @@ def app():
         
         with col1:
             source_text = st.text_area("Enter text to translate:", height=150)
-            source_lang = "English"  # Fixed for simplicity
             target_lang = st.selectbox("Translate to:", ["French", "Spanish", "Italian", "Mandarin"])
         
         with col2:
             st.write("Translation:")
             if source_text and target_lang:
-                # Construct the query for DeepSeek
-                query = f"Translate '{source_text}' from {source_lang} to {target_lang}"
-                raw_translated_text = process_query_with_llm(query)
-                translated_text = clean_translation_response(raw_translated_text)
+                translated_text = translate_with_deepseek(source_text, target_lang)
                 st.text_area("Translation:", translated_text, height=150)
-                
-                # Text-to-speech option (simulated)
-                if st.button("Listen to Translation"):
-                    st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", format="audio/mp3")
         
         # Common phrases section
         st.subheader("Common Travel Phrases")
