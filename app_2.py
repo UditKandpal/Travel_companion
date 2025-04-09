@@ -25,6 +25,9 @@ import subprocess
 import sys
 import streamlit as st
 
+import torchvision.transforms as transforms
+import clip
+from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
 
 # Simulated landmark database (in real app, this would be a more comprehensive database)
 LANDMARKS_DB = {
@@ -117,34 +120,99 @@ user_preferences = {
     "dietary_restrictions": ["vegetarian options"]
 }
 
+
 class VideoProcessor(VideoTransformerBase):
     def __init__(self):
         self.landmark_detected = None
         
+        # Load CLIP model for landmark classification
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.clip_model, self.preprocess = clip.load("ViT-B/32", device=self.device)
+        
+        # Load Segformer for image segmentation
+        self.segformer_processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        self.segformer_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        self.segformer_model.to(self.device)
+        
+        # Prepare text labels for CLIP
+        self.landmark_names = list(LANDMARKS_DB.keys())
+        self.text_inputs = torch.cat([clip.tokenize(f"a photo of {LANDMARKS_DB[landmark]['name']}") 
+                                     for landmark in self.landmark_names]).to(self.device)
+        
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
+        pil_image = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         
-        # Simulated landmark detection
-        # In a real app, this would use an actual CV model to detect landmarks
-        # Here we're just randomly "detecting" landmarks occasionally
-        if random.random() < 0.05:  # Small chance to detect a landmark each frame
-            landmarks = list(LANDMARKS_DB.keys())
-            self.landmark_detected = random.choice(landmarks)
+        # Step 1: Run segmentation to identify potential landmark regions
+        segmentation_inputs = self.segformer_processor(images=pil_image, return_tensors="pt").to(self.device)
+        segmentation_outputs = self.segformer_model(**segmentation_inputs)
+        predicted_mask = segmentation_outputs.logits.argmax(dim=1)[0]
+        
+        # Find largest connected component as potential landmark
+        if torch.max(predicted_mask) > 0:
+            # Step 2: Use CLIP to identify the landmark
+            clip_image = self.preprocess(pil_image).unsqueeze(0).to(self.device)
             
-            # Draw a box and label on the detected landmark
-            height, width = img.shape[:2]
-            cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
-            cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
-                      (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            with torch.no_grad():
+                image_features = self.clip_model.encode_image(clip_image)
+                text_features = self.clip_model.encode_text(self.text_inputs)
+                
+                similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+                confidence, index = similarity[0].topk(1)
+                
+                if confidence[0] > 0.5:  # Confidence threshold
+                    self.landmark_detected = self.landmark_names[index[0]]
+                    
+                    # Draw a box and label on the detected landmark
+                    height, width = img.shape[:2]
+                    # Convert segmentation mask to bounding box (simplified)
+                    # In a real app, you'd compute the precise bounding box from the mask
+                    cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
+                    cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
+                              (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    
+                    # Optionally overlay the segmentation mask
+                    mask_np = predicted_mask.cpu().numpy()
+                    colored_mask = np.zeros((mask_np.shape[0], mask_np.shape[1], 3), dtype=np.uint8)
+                    colored_mask[mask_np > 0] = [0, 0, 255]  # Red for landmark regions
+                    img = cv2.addWeighted(img, 0.8, colored_mask, 0.2, 0)
         
         return img
 
 def process_image(image):
-    """Process uploaded image for landmark detection"""
-    # Simulated landmark detection for uploaded images
-    # In a real app, this would use actual CV models
-    landmarks = list(LANDMARKS_DB.keys())
-    detected = random.choice(landmarks)
+    """Process uploaded image for landmark detection using CLIP and segmentation"""
+    # Convert uploaded image to PIL if needed
+    if not isinstance(image, Image.Image):
+        image = Image.fromarray(np.array(image))
+    
+    # Initialize models (in a production app, you'd reuse the models)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    clip_model, preprocess = clip.load("ViT-B/32", device=device)
+    
+    segformer_processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+    segformer_model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+    segformer_model.to(device)
+    
+    # Run segmentation to find landmark regions
+    segmentation_inputs = segformer_processor(images=image, return_tensors="pt").to(device)
+    segmentation_outputs = segformer_model(**segmentation_inputs)
+    predicted_mask = segmentation_outputs.logits.argmax(dim=1)[0]
+    
+    # Use CLIP to identify the landmark
+    clip_image = preprocess(image).unsqueeze(0).to(device)
+    
+    landmark_names = list(LANDMARKS_DB.keys())
+    text_inputs = torch.cat([clip.tokenize(f"a photo of {LANDMARKS_DB[landmark]['name']}") 
+                            for landmark in landmark_names]).to(device)
+    
+    with torch.no_grad():
+        image_features = clip_model.encode_image(clip_image)
+        text_features = clip_model.encode_text(text_inputs)
+        
+        similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+        confidence, index = similarity[0].topk(1)
+        
+        detected = landmark_names[index[0]]
     
     # Convert the image to a format we can work with
     img_array = np.array(image)
@@ -155,7 +223,14 @@ def process_image(image):
     cv2.putText(img_array, LANDMARKS_DB[detected]["name"], 
               (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
     
+    # Optionally overlay the segmentation mask
+    mask_np = predicted_mask.cpu().numpy()
+    colored_mask = np.zeros((mask_np.shape[0], mask_np.shape[1], 3), dtype=np.uint8)
+    colored_mask[mask_np > 0] = [0, 0, 255]  # Red for landmark regions
+    img_array = cv2.addWeighted(img_array, 0.8, colored_mask, 0.2, 0)
+    
     return img_array, detected
+
 
 def translate_text(text, target_language):
     """Simple translation function"""
