@@ -121,7 +121,7 @@ user_preferences = {
 }
 
 class VideoProcessor(VideoTransformerBase):
-    def _init_(self):
+    def __init__(self):
         self.landmark_detected = None
         # Load pretrained YOLOv5 model
         self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
@@ -130,37 +130,40 @@ class VideoProcessor(VideoTransformerBase):
         # Optional: Set device - CPU or GPU
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model.to(self.device)
-        # Optional: Set to evaluation mode for better performance
+        # Set to evaluation mode
         self.model.eval()
-        # Load LANDMARKS_DB from your existing code (assuming it's defined elsewhere)
-        # self.LANDMARKS_DB = LANDMARKS_DB  # Uncomment if you have this database defined
-        
+        # Define allowed classes for monuments
+        self.allowed_classes = ['cathedral', 'castle', 'church', 'building', 'tower']
+
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        
+
         # YOLOv5 detection
         results = self.model(img)
-        
+
         # Process results
-        detections = results.xyxy[0].cpu().numpy()  # Convert to numpy array
-        
-        # Draw bounding boxes for detected objects
+        detections = results.xyxy[0].cpu().numpy()
+
+        # Draw bounding boxes for allowed objects
         for detection in detections:
             x1, y1, x2, y2, conf, cls = detection
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            
+
             # Get class label
             label = self.model.names[int(cls)]
-            
-            # Store the detected landmark
-            self.landmark_detected = label
-            
-            # Draw rectangle and label
-            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(img, f"{label} {conf:.2f}", (x1, y1 - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-        
+
+            # Filter only allowed classes
+            if label.lower() in self.allowed_classes:
+                # Store the detected landmark
+                self.landmark_detected = label
+
+                # Draw rectangle and label
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(img, f"{label} {conf:.2f}", (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+
         return img
+
 
 def process_image(image):
     """Process uploaded image for landmark detection using YOLOv5"""
@@ -169,36 +172,40 @@ def process_image(image):
         img_array = np.array(image)
     else:
         img_array = image
-    
+
     # Load YOLOv5 model
     model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
     model.conf = 0.5
-    
+
+    # Define allowed classes for monuments
+    allowed_classes = ['cathedral', 'castle', 'church', 'building', 'tower']
+
     # Run detection
     results = model(img_array)
-    
+
     # Process results
     detections = results.xyxy[0].cpu().numpy()
-    
-    # Draw bounding boxes and return the first detected object
+
+    # Draw bounding boxes and return the first detected allowed object
     detected = None
     for detection in detections:
         x1, y1, x2, y2, conf, cls = detection
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-        
+
         # Get class label
         label = model.names[int(cls)]
-        detected = label
-        
-        # Draw rectangle and label
-        cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(img_array, f"{label} {conf:.2f}", (x1, y1 - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-        
-        # We could break here if only interested in the first detection
-        # break
-    
+
+        # Filter only allowed classes
+        if label.lower() in allowed_classes:
+            detected = label
+
+            # Draw rectangle and label
+            cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(img_array, f"{label} {conf:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+
     return img_array, detected
+
 
 
 
