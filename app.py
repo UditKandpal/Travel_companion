@@ -488,6 +488,36 @@ def app():
         # Fallback: return the raw response trimmed of fluff
         return re.sub(r"^(Translation:|Translated text:)", "", response).strip()
 
+    class AudioProcessor(AudioProcessorBase):
+        def __init__(self):
+            self.recognizer = sr.Recognizer()
+            self.audio_frames = []
+    
+        def recv(self, frame):
+            audio_data = frame.to_ndarray()
+            self.audio_frames.append(audio_data)
+            return frame
+    
+        def process_audio(self):
+            if not self.audio_frames:
+                return "No audio recorded"
+            
+            # Convert audio frames to a format compatible with speech_recognition
+            audio_data = b''.join([frame.tobytes() for frame in self.audio_frames])
+            audio_file = sr.AudioData(audio_data, sample_rate=48000, sample_width=2)  # Adjust sample rate if needed
+            
+            try:
+                text = self.recognizer.recognize_google(audio_file)
+                return text
+            except sr.UnknownValueError:
+                return "Could not understand audio"
+            except sr.RequestError as e:
+                return f"Could not request results; {str(e)}"
+            except Exception as e:
+                return f"Error: {str(e)}"
+            finally:
+                self.audio_frames = []  # Clear frames after processing
+
     def translate_with_deepseek(text, target_lang):
         api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"
         model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
@@ -554,11 +584,18 @@ def app():
         st.header("Voice Assistant")
         st.write("Ask questions or get information using your voice (powered by an AI language model)")
         
-        if st.button("Start Listening"):
-            with st.spinner("Listening..."):
-                try:
-                    voice_text = listen_to_voice()
-                    if voice_text and voice_text not in ["Could not understand audio", "Could not request results"]:
+        ctx = webrtc_streamer(
+            key="voice-assistant",
+            audio_processor_factory=AudioProcessor,
+            media_stream_constraints={"audio": True, "video": False},
+            async_processing=True
+        )
+        
+        if ctx.audio_processor:
+            if st.button("Process Audio"):
+                with st.spinner("Processing..."):
+                    voice_text = ctx.audio_processor.process_audio()
+                    if voice_text and voice_text not in ["Could not understand audio", "No audio recorded"]:
                         st.success(f"You said: {voice_text}")
                         
                         # Process the voice command with LLM
@@ -572,11 +609,8 @@ def app():
                             st.write("For translations, I’ll need a specific language. Please say something like 'Translate hello to French'.")
                         elif "map" in clean_response.lower() or "location" in clean_response.lower():
                             st.image("https://via.placeholder.com/600x400?text=Map+of+your+location", caption="Simulated Map")
-                    
                     else:
                         st.error(voice_text or "No audio detected.")
-                except Exception as e:
-                    st.error(f"Error processing voice: {str(e)}")
         
         # Text input as fallback
         text_query = st.text_input("Or type your question:")
