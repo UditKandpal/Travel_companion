@@ -57,5 +57,6 @@ requests
 # For voice input
 pyaudio>=0.2.14
 speechrecognition>=3.10.0
+ultralytics>=8.0.0
 
 
