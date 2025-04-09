@@ -120,122 +120,85 @@ user_preferences = {
     "dietary_restrictions": ["vegetarian options"]
 }
 
-class VideoProcessor(VideoProcessorBase):
-    def __init__(self):
+class VideoProcessor(VideoTransformerBase):
+    def _init_(self):
         self.landmark_detected = None
-        self.model = YOLO("yolov5su.pt")  # Updated to yolov5su.pt
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Using device: {self.device}")
+        # Load pretrained YOLOv5 model
+        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+        # Set confidence threshold
+        self.model.conf = 0.5
+        # Optional: Set device - CPU or GPU
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(self.device)
+        # Optional: Set to evaluation mode for better performance
+        self.model.eval()
+        # Load LANDMARKS_DB from your existing code (assuming it's defined elsewhere)
+        # self.LANDMARKS_DB = LANDMARKS_DB  # Uncomment if you have this database defined
         
-        self.class_to_landmark = {
-            "building": "taj_mahal",  # Temporary mapping
-        }
-        
-        self.frame_counter = 0
-        self.process_interval = 15
-
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
-        self.frame_counter += 1
-        if self.frame_counter % self.process_interval == 0:
-            results = self.model(img)
-
-            # Get the first result safely
-            result = results[0]
-
-            if result.boxes is not None and result.boxes.data is not None:
-                detections = result.boxes.data.cpu().numpy()
-
-                if len(detections) > 0:
-                    for det in detections:
-                        x_min, y_min, x_max, y_max, confidence, class_id = det
-                        class_name = self.model.names[int(class_id)]
-                        print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
-
-                        if confidence > 0.5:
-                            landmark_key = self.class_to_landmark.get(class_name)
-                            if landmark_key and landmark_key in LANDMARKS_DB:
-                                self.landmark_detected = landmark_key
-                                cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                                label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
-                                cv2.putText(img, label,
-                                            (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                                            0.9, (36, 255, 12), 2)
-                            else:
-                                cv2.putText(img, f"Unknown: {class_name}",
-                                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                                            0.7, (255, 0, 0), 2)
-                else:
-                    self.landmark_detected = None
-                    cv2.putText(img, "No landmark detected",
-                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.7, (255, 0, 0), 2)
-            else:
-                self.landmark_detected = None
-                cv2.putText(img, "No landmark detected",
-                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7, (255, 0, 0), 2)
-
-        elif self.landmark_detected:
-            height, width = img.shape[:2]
-            cv2.rectangle(img, (width // 4, height // 4), (3 * width // 4, 3 * height // 4), (0, 255, 0), 2)
-            cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"],
-                        (width // 4, height // 4 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.9, (36, 255, 12), 2)
-
+        # YOLOv5 detection
+        results = self.model(img)
+        
+        # Process results
+        detections = results.xyxy[0].cpu().numpy()  # Convert to numpy array
+        
+        # Draw bounding boxes for detected objects
+        for detection in detections:
+            x1, y1, x2, y2, conf, cls = detection
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            
+            # Get class label
+            label = self.model.names[int(cls)]
+            
+            # Store the detected landmark
+            self.landmark_detected = label
+            
+            # Draw rectangle and label
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(img, f"{label} {conf:.2f}", (x1, y1 - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+        
         return img
 
-
 def process_image(image):
-    # Convert the PIL image to a numpy array
-    img_array = np.array(image)
-    img_array = img_array.astype(np.uint8)
-
-
-    # Perform inference using your model
-    results = model(img_array)
-
-    # Get the first result (since results is a list-like object)
-    result = results[0]
-
-    # Prepare to draw on the image
-    draw = ImageDraw.Draw(image)
-
-    # Initialize detected landmark as None
-    detected = None
-
-    # Check if boxes exist
-    if result.boxes is not None and result.boxes.data is not None:
-        # Convert detection data to numpy for easy unpacking
-        detections = result.boxes.data.cpu().numpy()
-
-        # Loop through each detection
-        for det in detections:
-            x_min, y_min, x_max, y_max, confidence, class_id = det
-
-            # Get class name from the model
-            class_name = model.names[int(class_id)]
-            detected = class_name  # Assign the detected class
-
-            # Draw bounding box
-            draw.rectangle(
-                [x_min, y_min, x_max, y_max],
-                outline="red",
-                width=3
-            )
-
-            # Draw label and confidence
-            draw.text(
-                (x_min, max(y_min - 10, 0)),
-                f"{class_name} {confidence:.2f}",
-                fill="red"
-            )
+    """Process uploaded image for landmark detection using YOLOv5"""
+    # Convert PIL image to numpy array if needed
+    if not isinstance(image, np.ndarray):
+        img_array = np.array(image)
     else:
-        print("No detections found.")
-
-    # Return the annotated image and the detected class name
-    return image, detected
+        img_array = image
+    
+    # Load YOLOv5 model
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+    model.conf = 0.5
+    
+    # Run detection
+    results = model(img_array)
+    
+    # Process results
+    detections = results.xyxy[0].cpu().numpy()
+    
+    # Draw bounding boxes and return the first detected object
+    detected = None
+    for detection in detections:
+        x1, y1, x2, y2, conf, cls = detection
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        
+        # Get class label
+        label = model.names[int(cls)]
+        detected = label
+        
+        # Draw rectangle and label
+        cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(img_array, f"{label} {conf:.2f}", (x1, y1 - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+        
+        # We could break here if only interested in the first detection
+        # break
+    
+    return img_array, detected
 
 
 
