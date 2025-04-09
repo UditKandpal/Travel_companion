@@ -31,40 +31,30 @@ from transformers import MobileViTFeatureExtractor, MobileViTForImageClassificat
 
 # Simulated landmark database (in real app, this would be a more comprehensive database)
 LANDMARKS_DB = {
-    "eiffel_tower": {
+    "Eiffel Tower": {
         "name": "Eiffel Tower",
-        "description": "Iconic iron tower in Paris, France.",
-        "history": "Completed in 1889 as the entrance arch to the 1889 World's Fair.",
-        "recommendations": ["Visit at sunset", "Book tickets in advance", "Check out the restaurant"],
-        "nearby": ["Champ de Mars", "Trocadéro Gardens", "Seine River Cruise"]
+        "location": "Paris, France",
+        "info": "Iconic iron tower built in 1889"
     },
-    "statue_of_liberty": {
+    "Statue of Liberty": {
         "name": "Statue of Liberty",
-        "description": "Neoclassical sculpture on Liberty Island in New York Harbor.",
-        "history": "A gift from the people of France, dedicated in 1886.",
-        "recommendations": ["Take the ferry early", "Climb to the crown (reservation required)", "Visit the museum"],
-        "nearby": ["Ellis Island", "Battery Park", "One World Trade Center"]
+        "location": "New York, USA",
+        "info": "Neoclassical monument gifted by France"
     },
-    "taj_mahal": {
+    "Taj Mahal": {
         "name": "Taj Mahal",
-        "description": "Ivory-white marble mausoleum in Agra, India.",
-        "history": "Built between 1631 and 1648 by order of the Mughal emperor Shah Jahan.",
-        "recommendations": ["Visit at sunrise", "Hire a local guide", "Bring water and sunscreen"],
-        "nearby": ["Agra Fort", "Mehtab Bagh", "Fatehpur Sikri"]
+        "location": "Agra, India",
+        "info": "Ivory-white marble mausoleum"
     },
-    "colosseum": {
+    "Colosseum": {
         "name": "Colosseum",
-        "description": "Ancient amphitheater in Rome, Italy.",
-        "history": "Construction began under Emperor Vespasian in AD 72 and completed in AD 80.",
-        "recommendations": ["Buy combined ticket with Roman Forum", "Visit early or late", "Take a guided tour"],
-        "nearby": ["Roman Forum", "Palatine Hill", "Arch of Constantine"]
+        "location": "Rome, Italy",
+        "info": "Ancient Roman amphitheater"
     },
-    "great_wall": {
+    "Great Wall": {
         "name": "Great Wall of China",
-        "description": "Series of fortifications built along the northern borders of China.",
-        "history": "Built from the 7th century BC, with many parts rebuilt during the Ming dynasty.",
-        "recommendations": ["Visit less crowded sections", "Wear comfortable shoes", "Check weather before going"],
-        "nearby": ["Ming Tombs", "Summer Palace", "Forbidden City"]
+        "location": "China",
+        "info": "Series of fortifications built across northern China"
     }
 }
 
