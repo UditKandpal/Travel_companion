@@ -120,57 +120,57 @@ user_preferences = {
     "dietary_restrictions": ["vegetarian options"]
 }
 
+def get_recommendations(landmark, user_preferences):
+    # Placeholder function (replace with your logic)
+    return {
+        "restaurant_suggestions": [{"name": "Local Cafe", "cuisine": "Indian", "price": "$$", "dietary": ["vegetarian"]}],
+        "itinerary": ["Visit the monument", "Explore nearby markets"]
+    }
+
 class VideoProcessor(VideoTransformerBase):
     def __init__(self):
         self.landmark_detected = None
-        
-        # Load pre-trained YOLOv5 model (small version for speed)
-        self.model = YOLO("yolov5s.pt")  # Pre-trained on COCO
+        self.model = YOLO("yolov5s.pt")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {self.device}")
         
-        # Mapping COCO classes to your landmarks (simplified for demo)
         self.class_to_landmark = {
-            "building": "taj_mahal",  # COCO doesn't have specific monuments, so we approximate
-            # Add more mappings if fine-tuned (e.g., after training on custom dataset)
+            "building": "taj_mahal",  # Temporary mapping for demo
         }
         
         self.frame_counter = 0
-        self.process_interval = 15  # Process every 15 frames
+        self.process_interval = 15
     
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
         self.frame_counter += 1
         if self.frame_counter % self.process_interval == 0:
-            # Run YOLOv5 inference
             results = self.model(img)
             
-            # Process detections
-            for det in results.xyxy[0]:  # [x_min, y_min, x_max, y_max, confidence, class_id]
-                x_min, y_min, x_max, y_max, confidence, class_id = det
-                class_name = self.model.names[int(class_id)]
-                
-                # Debugging: Print detected class
-                print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
-                
-                if confidence > 0.5:  # Adjust threshold as needed
-                    landmark_key = self.class_to_landmark.get(class_name)
-                    if landmark_key and landmark_key in LANDMARKS_DB:
-                        self.landmark_detected = landmark_key
-                        
-                        # Draw bounding box
-                        cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                        label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
-                        cv2.putText(img, label, 
-                                   (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                    else:
-                        # Unknown detection
-                        cv2.putText(img, f"Unknown: {class_name}", 
-                                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            if len(results.xyxy[0]) > 0:  # Check if there are detections
+                for det in results.xyxy[0]:
+                    x_min, y_min, x_max, y_max, confidence, class_id = det
+                    class_name = self.model.names[int(class_id)]
+                    print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
+                    
+                    if confidence > 0.5:
+                        landmark_key = self.class_to_landmark.get(class_name)
+                        if landmark_key and landmark_key in LANDMARKS_DB:
+                            self.landmark_detected = landmark_key
+                            cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                            label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
+                            cv2.putText(img, label, 
+                                       (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                        else:
+                            cv2.putText(img, f"Unknown: {class_name}", 
+                                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            else:
+                self.landmark_detected = None
+                cv2.putText(img, "No landmark detected", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
         
         elif self.landmark_detected:
-            # Retain last detection
             height, width = img.shape[:2]
             cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
             cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
@@ -179,47 +179,41 @@ class VideoProcessor(VideoTransformerBase):
         return img
 
 def process_image(image):
-    # Load YOLOv5 model
     model = YOLO("yolov5s.pt")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     
-    # Mapping COCO classes to landmarks
     class_to_landmark = {
-        "building": "taj_mahal",  # Approximation for demo
-        # Add more if fine-tuned
+        "building": "taj_mahal",  # Temporary mapping
     }
     
-    # Convert to numpy array if needed
     if isinstance(image, np.ndarray):
         img_array = image
     else:
         img_array = np.array(image)
     
-    # Run inference
     results = model(img_array)
+    detected = "unknown"
     
-    detected = None
-    for det in results.xyxy[0]:
-        x_min, y_min, x_max, y_max, confidence, class_id = det
-        class_name = model.names[int(class_id)]
-        
-        print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
-        
-        if confidence > 0.5:
-            landmark_key = class_to_landmark.get(class_name)
-            if landmark_key and landmark_key in LANDMARKS_DB:
-                detected = landmark_key
-                cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
-                cv2.putText(img_array, label, 
-                           (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-            else:
-                cv2.putText(img_array, f"Unknown: {class_name}", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                detected = "unknown"
-    
-    if not detected:
+    if len(results.xyxy[0]) > 0:  # Check if there are detections
+        for det in results.xyxy[0]:
+            x_min, y_min, x_max, y_max, confidence, class_id = det
+            class_name = model.names[int(class_id)]
+            print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
+            
+            if confidence > 0.5:
+                landmark_key = class_to_landmark.get(class_name)
+                if landmark_key and landmark_key in LANDMARKS_DB:
+                    detected = landmark_key
+                    cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                    label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
+                    cv2.putText(img_array, label, 
+                               (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                else:
+                    cv2.putText(img_array, f"Unknown: {class_name}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                    detected = "unknown"
+    else:
         height, width = img_array.shape[:2]
         cv2.putText(img_array, "No landmark detected", 
                    (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
@@ -357,22 +351,79 @@ def app():
 
     with tab1:
         st.header("Landmark Detection")
+        st.write("Use your camera to identify landmarks or upload a photo.")
         
-        # Video stream
-        st.subheader("Live Video Detection")
-        webrtc_streamer(key="video", video_transformer_factory=VideoProcessor)
+        detection_method = st.radio("Choose detection method:", ["Upload Image", "Use Camera"])
+        detected_landmark = None
         
-        # Image upload
-        st.subheader("Upload an Image")
-        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-        if uploaded_file is not None:
-            image = Image.open(uploaded_file)
-            processed_image, detected = process_image(image)
-            st.image(processed_image, caption=f"Detected: {detected}", use_column_width=True)
-            if detected in LANDMARKS_DB:
-                st.write(f"Landmark: {LANDMARKS_DB[detected]['name']}")
-            else:
-                st.write("No known landmark detected.")
+        if detection_method == "Upload Image":
+            uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+            
+            if uploaded_file is not None:
+                image = Image.open(uploaded_file)
+                st.image(image, caption="Uploaded Image", use_column_width=True)
+                
+                if st.button("Detect Landmarks"):
+                    with st.spinner("Processing image..."):
+                        processed_img, detected_landmark = process_image(image)
+                        st.image(processed_img, 
+                                caption=f"Detected: {LANDMARKS_DB.get(detected_landmark, {'name': 'Unknown'})['name']}", 
+                                use_column_width=True)
+                        
+                        if detected_landmark in LANDMARKS_DB:
+                            st.subheader(LANDMARKS_DB[detected_landmark]['name'])
+                            st.write(LANDMARKS_DB[detected_landmark]['description'])
+                            
+                            recommendations = get_recommendations(detected_landmark, user_preferences)
+                            
+                            with st.expander("Learn More"):
+                                st.write(LANDMARKS_DB[detected_landmark]['history'])
+                            
+                            with st.expander("Personalized Recommendations"):
+                                st.subheader("Based on your preferences:")
+                                if recommendations["restaurant_suggestions"]:
+                                    st.write("#### Where to Eat")
+                                    for restaurant in recommendations["restaurant_suggestions"]:
+                                        st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
+                                        if restaurant['dietary']:
+                                            st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
+                                if recommendations["itinerary"]:
+                                    st.write("#### Suggested Itinerary")
+                                    for i, item in enumerate(recommendations["itinerary"], 1):
+                                        st.write(f"{i}. {item}")
+                        else:
+                            st.write("No known landmark detected.")
+        
+        else:  # Use Camera
+            st.write("Note: Camera access requires permission from your browser")
+            ctx = webrtc_streamer(
+                key="landmark-detection",
+                video_processor_factory=VideoProcessor,
+                media_stream_constraints={"video": True, "audio": False},
+            )
+            
+            if ctx.video_processor and ctx.video_processor.landmark_detected:
+                detected_landmark = ctx.video_processor.landmark_detected
+                st.subheader(f"Detected: {LANDMARKS_DB[detected_landmark]['name']}")
+                st.write(LANDMARKS_DB[detected_landmark]['description'])
+                
+                recommendations = get_recommendations(detected_landmark, user_preferences)
+                
+                with st.expander("Learn More"):
+                    st.write(LANDMARKS_DB[detected_landmark]['history'])
+                
+                with st.expander("Personalized Recommendations"):
+                    st.subheader("Based on your preferences:")
+                    if recommendations["restaurant_suggestions"]:
+                        st.write("#### Where to Eat")
+                        for restaurant in recommendations["restaurant_suggestions"]:
+                            st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
+                            if restaurant['dietary']:
+                                st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
+                    if recommendations["itinerary"]:
+                        st.write("#### Suggested Itinerary")
+                        for i, item in enumerate(recommendations["itinerary"], 1):
+                            st.write(f"{i}. {item}")
                 
     # # Tab 1: Computer Vision for Landmark Detection
     # with tab1:
