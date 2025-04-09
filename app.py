@@ -121,73 +121,48 @@ user_preferences = {
 }
 
 class VideoProcessor(VideoTransformerBase):
-    def _init_(self):
+    def __init__(self):
         self.landmark_detected = None
+        self.model = YOLO("yolov5s.pt")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {self.device}")
         
-        # Load YOLOv5 model
-        print("Loading YOLOv5 model...")
-        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
-        self.model.eval()
+        self.class_to_landmark = {
+            "building": "taj_mahal",  # Temporary mapping for demo
+        }
         
-        # Frame counter for processing efficiency
         self.frame_counter = 0
-        self.process_interval = 15  # Process every 15 frames
-        
+        self.process_interval = 15
+    
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
-        # Process every Nth frame to improve performance
         self.frame_counter += 1
         if self.frame_counter % self.process_interval == 0:
-            # Run YOLOv5 detection
             results = self.model(img)
             
-            # Process the results
-            predictions = results.pred[0]  # Get predictions for first image
-            
-            # Filter for objects with good confidence
-            good_detections = []
-            for *box, conf, cls_id in predictions:
-                if conf > 0.6:  # Confidence threshold
-                    good_detections.append((box, conf, cls_id))
-            
-            # If we detected something
-            if good_detections:
-                # Choose the detection with highest confidence
-                best_detection = max(good_detections, key=lambda x: x[1])
-                box, conf, cls_id = best_detection
-                
-                # Convert box coordinates to integers
-                x1, y1, x2, y2 = map(int, box)
-                
-                # Get information about what YOLO detected
-                yolo_class = self.model.names[int(cls_id)]
-                
-                # Map to a landmark based on the detected object and image content
-                # For monuments, we'll prioritize building-like objects
-                if yolo_class in ['building', 'tower', 'castle', 'house', 'bridge']:
-                    priority_factor = 3
-                else:
-                    priority_factor = 1
+            if len(results[0].xyxy) > 0:  # Check if there are detections in the first result
+                for det in results[0].xyxy:
+                    x_min, y_min, x_max, y_max, confidence, class_id = det
+                    class_name = self.model.names[int(class_id)]
+                    print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
                     
-                # Create a deterministic but content-aware mapping
-                roi = img[y1:y2, x1:x2]
-                if roi.size > 0:  # Avoid empty ROIs
-                    img_hash = (np.sum(roi) * priority_factor) % len(LANDMARKS_DB)
-                    
-                    # Get landmark based on hash
-                    landmarks = list(LANDMARKS_DB.keys())
-                    self.landmark_detected = landmarks[int(img_hash)]
-                    
-                    # Draw bounding box
-                    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    
-                    # Add landmark name and confidence
-                    label = f"{LANDMARKS_DB[self.landmark_detected]['name']} ({conf:.2f})"
-                    cv2.putText(img, label, (x1, y1 - 10), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    if confidence > 0.5:
+                        landmark_key = self.class_to_landmark.get(class_name)
+                        if landmark_key and landmark_key in LANDMARKS_DB:
+                            self.landmark_detected = landmark_key
+                            cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                            label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
+                            cv2.putText(img, label, 
+                                       (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                        else:
+                            cv2.putText(img, f"Unknown: {class_name}", 
+                                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            else:
+                self.landmark_detected = None
+                cv2.putText(img, "No landmark detected", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
         
-        # If we have a detection but aren't processing this frame, still show the last detection
         elif self.landmark_detected:
             height, width = img.shape[:2]
             cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
@@ -197,72 +172,44 @@ class VideoProcessor(VideoTransformerBase):
         return img
 
 def process_image(image):
-    """Process uploaded image for landmark detection using YOLOv5"""
-    # Load YOLOv5 model
-    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+    model = YOLO("yolov5s.pt")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
     
-    # Convert to numpy array if not already
-    if not isinstance(image, np.ndarray):
+    class_to_landmark = {
+        "building": "taj_mahal",  # Temporary mapping
+    }
+    
+    if isinstance(image, np.ndarray):
+        img_array = image
+    else:
         img_array = np.array(image)
-    else:
-        img_array = image.copy()
     
-    # Run detection
     results = model(img_array)
+    detected = "unknown"
     
-    # Process the results
-    predictions = results.pred[0]  # Get predictions for first image
-    
-    # Filter for objects with good confidence
-    good_detections = []
-    for *box, conf, cls_id in predictions:
-        if conf > 0.6:  # Confidence threshold
-            good_detections.append((box, conf, cls_id))
-    
-    detected = None
-    
-    # If we detected something
-    if good_detections:
-        # Choose the detection with highest confidence
-        best_detection = max(good_detections, key=lambda x: x[1])
-        box, conf, cls_id = best_detection
-        
-        # Convert box coordinates to integers
-        x1, y1, x2, y2 = map(int, box)
-        
-        # Get information about what YOLO detected
-        yolo_class = model.names[int(cls_id)]
-        
-        # Map to a landmark based on detected object
-        if yolo_class in ['building', 'tower', 'castle', 'house', 'bridge']:
-            priority_factor = 3
-        else:
-            priority_factor = 1
+    if len(results[0].xyxy) > 0:  # Check if there are detections in the first result
+        for det in results[0].xyxy:
+            x_min, y_min, x_max, y_max, confidence, class_id = det
+            class_name = model.names[int(class_id)]
+            print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
             
-        # Create a deterministic mapping based on image content
-        roi = img_array[y1:y2, x1:x2]
-        if roi.size > 0:
-            img_hash = (np.sum(roi) * priority_factor) % len(LANDMARKS_DB)
-            landmarks = list(LANDMARKS_DB.keys())
-            detected = landmarks[int(img_hash)]
-            
-            # Draw bounding box
-            cv2.rectangle(img_array, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            
-            # Add landmark name and confidence
-            label = f"{LANDMARKS_DB[detected]['name']} ({conf:.2f})"
-            cv2.putText(img_array, label, (x1, y1 - 10), 
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-            
-            # Add detected class info
-            info_text = f"YOLO detected: {yolo_class}"
-            cv2.putText(img_array, info_text, (x1, y2 + 20), 
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            if confidence > 0.5:
+                landmark_key = class_to_landmark.get(class_name)
+                if landmark_key and landmark_key in LANDMARKS_DB:
+                    detected = landmark_key
+                    cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                    label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
+                    cv2.putText(img_array, label, 
+                               (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                else:
+                    cv2.putText(img_array, f"Unknown: {class_name}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                    detected = "unknown"
     else:
-        # No object detected
         height, width = img_array.shape[:2]
         cv2.putText(img_array, "No landmark detected", 
-                  (width//4, height//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                   (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
         detected = "unknown"
     
     return img_array, detected
