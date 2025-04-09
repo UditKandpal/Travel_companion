@@ -354,90 +354,109 @@ def app():
     
     # Main content
     tab1, tab2, tab3, tab4 = st.tabs(["Landmark Detection", "Voice Assistant", "Translation", "Trip Planning"])
-    
-    # Tab 1: Computer Vision for Landmark Detection
+
     with tab1:
         st.header("Landmark Detection")
-        st.write("Use your camera to identify landmarks or upload a photo.")
         
-        detection_method = st.radio("Choose detection method:", ["Upload Image", "Use Camera"])
+        # Video stream
+        st.subheader("Live Video Detection")
+        webrtc_streamer(key="video", video_transformer_factory=VideoProcessor)
         
-        detected_landmark = None
-        
-        if detection_method == "Upload Image":
-            uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-            
-            if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded Image", use_column_width=True)
+        # Image upload
+        st.subheader("Upload an Image")
+        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file)
+            processed_image, detected = process_image(image)
+            st.image(processed_image, caption=f"Detected: {detected}", use_column_width=True)
+            if detected in LANDMARKS_DB:
+                st.write(f"Landmark: {LANDMARKS_DB[detected]['name']}")
+            else:
+                st.write("No known landmark detected.")
                 
-                if st.button("Detect Landmarks"):
-                    with st.spinner("Processing image..."):
-                        processed_img, detected_landmark = process_image(image)
-                        st.image(processed_img, caption=f"Detected: {LANDMARKS_DB[detected_landmark]['name']}", use_column_width=True)
-                        
-                        # Show landmark information
-                        st.subheader(LANDMARKS_DB[detected_landmark]['name'])
-                        st.write(LANDMARKS_DB[detected_landmark]['description'])
-                        
-                        # Get personalized recommendations
-                        recommendations = get_recommendations(detected_landmark, user_preferences)
-                        
-                        with st.expander("Learn More"):
-                            st.write(LANDMARKS_DB[detected_landmark]['history'])
-                        
-                        with st.expander("Personalized Recommendations"):
-                            st.subheader("Based on your preferences:")
-                            
-                            if recommendations["restaurant_suggestions"]:
-                                st.write("#### Where to Eat")
-                                for restaurant in recommendations["restaurant_suggestions"]:
-                                    st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
-                                    if restaurant['dietary']:
-                                        st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
-                            
-                            if recommendations["itinerary"]:
-                                st.write("#### Suggested Itinerary")
-                                for i, item in enumerate(recommendations["itinerary"], 1):
-                                    st.write(f"{i}. {item}")
+    # # Tab 1: Computer Vision for Landmark Detection
+    # with tab1:
+    #     st.header("Landmark Detection")
+    #     st.write("Use your camera to identify landmarks or upload a photo.")
         
-        else:  # Use Camera
-            st.write("Note: Camera access requires permission from your browser")
+    #     detection_method = st.radio("Choose detection method:", ["Upload Image", "Use Camera"])
+        
+    #     detected_landmark = None
+        
+    #     if detection_method == "Upload Image":
+    #         uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
             
-            ctx = webrtc_streamer(
-                key="landmark-detection",
-                video_processor_factory=VideoProcessor,
-                media_stream_constraints={"video": True, "audio": False},
-            )
+    #         if uploaded_file is not None:
+    #             image = Image.open(uploaded_file)
+    #             st.image(image, caption="Uploaded Image", use_column_width=True)
+                
+    #             if st.button("Detect Landmarks"):
+    #                 with st.spinner("Processing image..."):
+    #                     processed_img, detected_landmark = process_image(image)
+    #                     st.image(processed_img, caption=f"Detected: {LANDMARKS_DB[detected_landmark]['name']}", use_column_width=True)
+                        
+    #                     # Show landmark information
+    #                     st.subheader(LANDMARKS_DB[detected_landmark]['name'])
+    #                     st.write(LANDMARKS_DB[detected_landmark]['description'])
+                        
+    #                     # Get personalized recommendations
+    #                     recommendations = get_recommendations(detected_landmark, user_preferences)
+                        
+    #                     with st.expander("Learn More"):
+    #                         st.write(LANDMARKS_DB[detected_landmark]['history'])
+                        
+    #                     with st.expander("Personalized Recommendations"):
+    #                         st.subheader("Based on your preferences:")
+                            
+    #                         if recommendations["restaurant_suggestions"]:
+    #                             st.write("#### Where to Eat")
+    #                             for restaurant in recommendations["restaurant_suggestions"]:
+    #                                 st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
+    #                                 if restaurant['dietary']:
+    #                                     st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
+                            
+    #                         if recommendations["itinerary"]:
+    #                             st.write("#### Suggested Itinerary")
+    #                             for i, item in enumerate(recommendations["itinerary"], 1):
+    #                                 st.write(f"{i}. {item}")
+        
+    #     else:  # Use Camera
+    #         st.write("Note: Camera access requires permission from your browser")
             
-            if ctx.video_processor:
-                if ctx.video_processor.landmark_detected:
-                    detected_landmark = ctx.video_processor.landmark_detected
+    #         ctx = webrtc_streamer(
+    #             key="landmark-detection",
+    #             video_processor_factory=VideoProcessor,
+    #             media_stream_constraints={"video": True, "audio": False},
+    #         )
+            
+    #         if ctx.video_processor:
+    #             if ctx.video_processor.landmark_detected:
+    #                 detected_landmark = ctx.video_processor.landmark_detected
                     
-                    if detected_landmark:
-                        st.subheader(f"Detected: {LANDMARKS_DB[detected_landmark]['name']}")
-                        st.write(LANDMARKS_DB[detected_landmark]['description'])
+    #                 if detected_landmark:
+    #                     st.subheader(f"Detected: {LANDMARKS_DB[detected_landmark]['name']}")
+    #                     st.write(LANDMARKS_DB[detected_landmark]['description'])
                         
-                        # Get personalized recommendations
-                        recommendations = get_recommendations(detected_landmark, user_preferences)
+    #                     # Get personalized recommendations
+    #                     recommendations = get_recommendations(detected_landmark, user_preferences)
                         
-                        with st.expander("Learn More"):
-                            st.write(LANDMARKS_DB[detected_landmark]['history'])
+    #                     with st.expander("Learn More"):
+    #                         st.write(LANDMARKS_DB[detected_landmark]['history'])
                         
-                        with st.expander("Personalized Recommendations"):
-                            st.subheader("Based on your preferences:")
+    #                     with st.expander("Personalized Recommendations"):
+    #                         st.subheader("Based on your preferences:")
                             
-                            if recommendations["restaurant_suggestions"]:
-                                st.write("#### Where to Eat")
-                                for restaurant in recommendations["restaurant_suggestions"]:
-                                    st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
-                                    if restaurant['dietary']:
-                                        st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
+    #                         if recommendations["restaurant_suggestions"]:
+    #                             st.write("#### Where to Eat")
+    #                             for restaurant in recommendations["restaurant_suggestions"]:
+    #                                 st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
+    #                                 if restaurant['dietary']:
+    #                                     st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
                             
-                            if recommendations["itinerary"]:
-                                st.write("#### Suggested Itinerary")
-                                for i, item in enumerate(recommendations["itinerary"], 1):
-                                    st.write(f"{i}. {item}")
+    #                         if recommendations["itinerary"]:
+    #                             st.write("#### Suggested Itinerary")
+    #                             for i, item in enumerate(recommendations["itinerary"], 1):
+    #                                 st.write(f"{i}. {item}")
                                     
     import requests
 
