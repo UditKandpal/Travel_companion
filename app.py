@@ -229,7 +229,7 @@ def process_image(image):
         img_array = image
     
     # Create detector instance
-    detector = MonumentDetector()
+    detector = VideoProcessor()
     
     # Create a dummy frame object with the image
     class Frame:
