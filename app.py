@@ -175,44 +175,50 @@ def process_image(image):
     model = YOLO("yolov5su.pt")  # Updated to yolov5su.pt
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
-    
+
     class_to_landmark = {
         "building": "taj_mahal",  # Temporary mapping
     }
-    
+
     if isinstance(image, np.ndarray):
         img_array = image
     else:
         img_array = np.array(image)
-    
+
     results = model(img_array)
     detected = "unknown"
-    
-    if len(results[0].xyxy) > 0:
-        for det in results[0].xyxy:
-            x_min, y_min, x_max, y_max, confidence, class_id = det
-            class_name = model.names[int(class_id)]
-            print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
-            
-            if confidence > 0.5:
-                landmark_key = class_to_landmark.get(class_name)
-                if landmark_key and landmark_key in LANDMARKS_DB:
-                    detected = landmark_key
-                    cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                    label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
-                    cv2.putText(img_array, label, 
-                               (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                else:
-                    cv2.putText(img_array, f"Unknown: {class_name}", 
-                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                    detected = "unknown"
-    else:
-        height, width = img_array.shape[:2]
-        cv2.putText(img_array, "No landmark detected", 
-                   (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
-        detected = "unknown"
-    
+
+    for result in results:  # iterate over batch (usually one image)
+        boxes = result.boxes
+        if boxes is not None and len(boxes) > 0:
+            for box in boxes:
+                x_min, y_min, x_max, y_max = map(int, box.xyxy[0].tolist())
+                confidence = float(box.conf[0])
+                class_id = int(box.cls[0])
+                class_name = model.names[class_id]
+
+                print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
+
+                if confidence > 0.5:
+                    landmark_key = class_to_landmark.get(class_name)
+                    if landmark_key and landmark_key in LANDMARKS_DB:
+                        detected = landmark_key
+                        cv2.rectangle(img_array, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                        label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
+                        cv2.putText(img_array, label,
+                                    (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    else:
+                        cv2.putText(img_array, f"Unknown: {class_name}",
+                                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                        detected = "unknown"
+        else:
+            height, width = img_array.shape[:2]
+            cv2.putText(img_array, "No landmark detected",
+                        (width // 4, height // 4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+            detected = "unknown"
+
     return img_array, detected
+
     
 def translate_text(text, target_language):
     """Simple translation function"""
