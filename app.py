@@ -513,7 +513,14 @@ def app():
             response.raise_for_status()  # Raises 429 or other errors
             result = response.json()
             if "choices" in result and result["choices"]:
-                return result["choices"][0]["message"]["content"].strip()
+                raw_response = result["choices"][0]["message"]["content"].strip()
+                # Clean the response to remove <think> section and extra text
+                if "</think>" in raw_response:
+                    cleaned_response = raw_response.split("</think>")[1].strip()
+                else:
+                    cleaned_response = raw_response
+                # Ensure only the translation is returned (remove any leading/trailing fluff)
+                return re.sub(r"^(Translation:|Translated text:)", "", cleaned_response).strip()
             return "Translation error"
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
