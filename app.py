@@ -20,7 +20,7 @@ import subprocess
 import sys
 import streamlit as st
 import requests
-
+from ultralytics import YOLO
 import os
 import subprocess
 import sys
@@ -121,147 +121,112 @@ user_preferences = {
 }
 
 class VideoProcessor(VideoTransformerBase):
-    def _init_(self):
+    def __init__(self):
         self.landmark_detected = None
         
-        # Initialize MobileViT model for image classification
+        # Load pre-trained YOLOv5 model (small version for speed)
+        self.model = YOLO("yolov5s.pt")  # Pre-trained on COCO
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {self.device}")
         
-        self.feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-small")
-        self.model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small")
-        self.model.to(self.device)
+        # Mapping COCO classes to your landmarks (simplified for demo)
+        self.class_to_landmark = {
+            "building": "taj_mahal",  # COCO doesn't have specific monuments, so we approximate
+            # Add more mappings if fine-tuned (e.g., after training on custom dataset)
+        }
         
-        # Map ImageNet classes to landmark names in your database
-        # This mapping should be customized for your specific landmarks
-        self.class_to_landmark = self._create_class_mapping()
-        
-        # For efficiency, we'll only process every few frames
         self.frame_counter = 0
         self.process_interval = 15  # Process every 15 frames
-        
-    def _create_class_mapping(self):
-        """Create a mapping from ImageNet classes to landmarks in your DB"""
-        # This is a simplified example - you'll need to customize this
-        # Map relevant ImageNet classes to your landmark database entries
-        mapping = {
-            # Format: "model_class_id": "your_landmark_key"
-            "409": "eiffel_tower",  # Example: ImageNet class 409 is "analog clock" - just a placeholder
-            "825": "taj_mahal",     # Example mapping
-            "970": "great_wall",    # Example mapping
-            # Add more mappings as needed
-        }
-        return mapping
     
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
-        # Only process certain frames to improve performance
         self.frame_counter += 1
         if self.frame_counter % self.process_interval == 0:
-            # Convert frame to PIL Image for the model
-            pil_image = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            # Run YOLOv5 inference
+            results = self.model(img)
             
-            # Prepare image for the model
-            inputs = self.feature_extractor(images=pil_image, return_tensors="pt").to(self.device)
-            
-            # Run inference
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-            
-            # Get predictions
-            logits = outputs.logits
-            predicted_class_idx = logits.argmax(-1).item()
-            predicted_class = self.model.config.id2label[predicted_class_idx]
-            confidence = torch.softmax(logits, dim=1)[0, predicted_class_idx].item()
-            
-            # Only consider predictions with high confidence
-            if confidence > 0.7:
-                # Check if this class maps to one of our landmarks
-                landmark_key = self.class_to_landmark.get(predicted_class)
-                if landmark_key and landmark_key in LANDMARKS_DB:
-                    self.landmark_detected = landmark_key
-                    
-                    # Draw bounding box and label
-                    height, width = img.shape[:2]
-                    cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
-                    
-                    # Add landmark name and confidence
-                    label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
-                    cv2.putText(img, label, 
-                              (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            # Process detections
+            for det in results.xyxy[0]:  # [x_min, y_min, x_max, y_max, confidence, class_id]
+                x_min, y_min, x_max, y_max, confidence, class_id = det
+                class_name = self.model.names[int(class_id)]
+                
+                # Debugging: Print detected class
+                print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
+                
+                if confidence > 0.5:  # Adjust threshold as needed
+                    landmark_key = self.class_to_landmark.get(class_name)
+                    if landmark_key and landmark_key in LANDMARKS_DB:
+                        self.landmark_detected = landmark_key
+                        
+                        # Draw bounding box
+                        cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                        label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
+                        cv2.putText(img, label, 
+                                   (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    else:
+                        # Unknown detection
+                        cv2.putText(img, f"Unknown: {class_name}", 
+                                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
         
-        # If we have a detection but aren't processing this frame, still show the last detection
         elif self.landmark_detected:
+            # Retain last detection
             height, width = img.shape[:2]
             cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
             cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
-                      (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                       (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
         
         return img
 
 def process_image(image):
-    """Process uploaded image for landmark detection using MobileViT"""
-    # Initialize the model for single image processing
-    feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-small")
-    model = MobileViTForImageClassification.from_pretrained("apple/mobilevit-small")
+    # Load YOLOv5 model
+    model = YOLO("yolov5s.pt")
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
+    print(f"Using device: {device}")
     
-    # Create class mapping (same as in VideoProcessor)
+    # Mapping COCO classes to landmarks
     class_to_landmark = {
-        "409": "eiffel_tower",
-        "825": "taj_mahal",
-        "970": "great_wall",
-        # Add more mappings as needed
+        "building": "taj_mahal",  # Approximation for demo
+        # Add more if fine-tuned
     }
     
-    # Convert to PIL Image if needed
+    # Convert to numpy array if needed
     if isinstance(image, np.ndarray):
-        pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        img_array = image
     else:
-        pil_image = image
-    
-    # Prepare image for the model
-    inputs = feature_extractor(images=pil_image, return_tensors="pt").to(device)
+        img_array = np.array(image)
     
     # Run inference
-    with torch.no_grad():
-        outputs = model(**inputs)
+    results = model(img_array)
     
-    # Get predictions
-    logits = outputs.logits
-    predicted_class_idx = logits.argmax(-1).item()
-    predicted_class = model.config.id2label[predicted_class_idx]
-    confidence = torch.softmax(logits, dim=1)[0, predicted_class_idx].item()
-    
-    # Convert the image to a format we can work with
-    img_array = np.array(image)
-    
-    # Try to map to a landmark
     detected = None
-    if predicted_class in class_to_landmark:
-        detected = class_to_landmark[predicted_class]
-    
-    # If confident match found and in our database
-    if detected and detected in LANDMARKS_DB and confidence > 0.7:
-        # Draw a box around the detected landmark
-        height, width = img_array.shape[:2]
-        cv2.rectangle(img_array, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
+    for det in results.xyxy[0]:
+        x_min, y_min, x_max, y_max, confidence, class_id = det
+        class_name = model.names[int(class_id)]
         
-        # Add landmark name and confidence
-        label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
-        cv2.putText(img_array, label, 
-                  (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-    else:
-        # No confident landmark detected
+        print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
+        
+        if confidence > 0.5:
+            landmark_key = class_to_landmark.get(class_name)
+            if landmark_key and landmark_key in LANDMARKS_DB:
+                detected = landmark_key
+                cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
+                cv2.putText(img_array, label, 
+                           (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            else:
+                cv2.putText(img_array, f"Unknown: {class_name}", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                detected = "unknown"
+    
+    if not detected:
         height, width = img_array.shape[:2]
         cv2.putText(img_array, "No landmark detected", 
-                  (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+                   (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
         detected = "unknown"
     
     return img_array, detected
-
+    
 def translate_text(text, target_language):
     """Simple translation function"""
     words = text.lower().split()
