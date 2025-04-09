@@ -471,6 +471,20 @@ def app():
         # For non-favourite queries, return the cleaned response as-is
         return response
 
+    def clean_translation_response(response):
+        # Remove <think> section if present
+        if "</think>" in response:
+            response = response.split("</think>")[1].strip()
+        
+        # Remove any extra explanation, keeping only the translation
+        # Assume the translation is the first line or sentence unless it’s clearly metadata
+        lines = response.split("\n")
+        for line in lines:
+            if line.strip() and not line.startswith("Response:") and not line.startswith("["):
+                return line.strip()
+        
+        # Fallback: return the raw response trimmed of fluff
+        return re.sub(r"^(Translation:|Translated text:)", "", response).strip()
 
 
 
@@ -654,7 +668,10 @@ def app():
         with col2:
             st.write("Translation:")
             if source_text and target_lang:
-                translated_text = translate_text(source_text, target_lang.lower())
+                # Construct the query for DeepSeek
+                query = f"Translate '{source_text}' from {source_lang} to {target_lang}"
+                raw_translated_text = process_query_with_llm(query)
+                translated_text = clean_translation_response(raw_translated_text)
                 st.text_area("Translation:", translated_text, height=150)
                 
                 # Text-to-speech option (simulated)
@@ -674,23 +691,15 @@ def app():
             st.write("Translations:")
             cols = st.columns(4)
             
-            translations = TRANSLATIONS.get(selected_phrase.lower(), {})
-            
-            with cols[0]:
-                st.write("**French:**")
-                st.write(translations.get("french", "-"))
-            
-            with cols[1]:
-                st.write("**Spanish:**")
-                st.write(translations.get("spanish", "-"))
-            
-            with cols[2]:
-                st.write("**Italian:**")
-                st.write(translations.get("italian", "-"))
-            
-            with cols[3]:
-                st.write("**Mandarin:**")
-                st.write(translations.get("mandarin", "-"))
+            # Use DeepSeek for translations instead of TRANSLATIONS dictionary
+            languages = ["French", "Spanish", "Italian", "Mandarin"]
+            for i, lang in enumerate(languages):
+                with cols[i]:
+                    st.write(f"**{lang}:**")
+                    query = f"Translate '{selected_phrase}' from English to {lang}"
+                    raw_response = process_query_with_llm(query)
+                    translated_text = clean_translation_response(raw_response)
+                    st.write(translated_text if translated_text else "-")
 
     # Tab 4: Trip Planning (Decision Making)
     with tab4:
