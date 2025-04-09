@@ -11,7 +11,7 @@ import pyttsx3
 from PIL import Image, ImageDraw
 import io
 import base64
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, AudioProcessorBase
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, AudioProcessorBase, VideoProcessorBase
 import av
 import threading
 import json
