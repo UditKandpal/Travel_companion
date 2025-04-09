@@ -53,6 +53,7 @@ SpeechRecognition
 pyttsx3
 openai
 requests
-
+clip 
+transformers
 
 
