@@ -487,7 +487,6 @@ def app():
         return re.sub(r"^(Translation:|Translated text:)", "", response).strip()
 
     def translate_with_deepseek(text, target_lang):
-        # Together AI DeepSeek API setup
         api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"
         model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
         url = "https://api.together.xyz/v1/chat/completions"
@@ -509,12 +508,34 @@ def app():
             "temperature": 0.7
         }
         
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            response.raise_for_status()  # Raises 429 or other errors
             result = response.json()
             if "choices" in result and result["choices"]:
                 return result["choices"][0]["message"]["content"].strip()
-        return "Translation error"
+            return "Translation error"
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                return "Too many requests. Please try again later."
+            return f"Error: {str(e)}"
+        except Exception as e:
+            return f"Error: {str(e)}"
+    
+    # Assuming this is your existing TRANSLATIONS dictionary (from earlier in your app)
+    # If not, ensure it’s defined elsewhere in your code
+    TRANSLATIONS = {
+        "hello": {"french": "bonjour", "spanish": "hola", "italian": "ciao", "mandarin": "nǐ hǎo"},
+        "goodbye": {"french": "au revoir", "spanish": "adios", "italian": "arrivederci", "mandarin": "zài jiàn"},
+        "thank you": {"french": "merci", "spanish": "gracias", "italian": "grazie", "mandarin": "xiè xiè"},
+        "where is": {"french": "où est", "spanish": "dónde está", "italian": "dove è", "mandarin": "zài nǎ lǐ"},
+        "help": {"french": "aidez-moi", "spanish": "ayuda", "italian": "aiuto", "mandarin": "bāng zhù"},
+        "restaurant": {"french": "restaurant", "spanish": "restaurante", "italian": "ristorante", "mandarin": "cān tīng"},
+        "museum": {"french": "musée", "spanish": "museo", "italian": "museo", "mandarin": "bó wù guǎn"},
+        "hotel": {"french": "hôtel", "spanish": "hotel", "italian": "albergo", "mandarin": "jiǔ diàn"},
+        "airport": {"french": "aéroport", "spanish": "aeropuerto", "italian": "aeroporto", "mandarin": "jī chǎng"},
+        "train": {"french": "train", "spanish": "tren", "italian": "treno", "mandarin": "huǒ chē"}
+    }
 
 
 
@@ -698,7 +719,10 @@ def app():
             st.write("Translation:")
             if source_text and target_lang:
                 translated_text = translate_with_deepseek(source_text, target_lang)
-                st.text_area("Translation:", translated_text, height=150)
+                if "Too many requests" in translated_text or "Error" in translated_text:
+                    st.error(translated_text)
+                else:
+                    st.text_area("Translation:", translated_text, height=150)
         
         # Common phrases section
         st.subheader("Common Travel Phrases")
@@ -712,16 +736,15 @@ def app():
         if selected_phrase:
             st.write("Translations:")
             cols = st.columns(4)
-            
-            # Use DeepSeek for translations instead of TRANSLATIONS dictionary
             languages = ["French", "Spanish", "Italian", "Mandarin"]
             for i, lang in enumerate(languages):
                 with cols[i]:
                     st.write(f"**{lang}:**")
-                    query = f"Translate '{selected_phrase}' from English to {lang}"
-                    raw_response = process_query_with_llm(query)
-                    translated_text = clean_translation_response(raw_response)
-                    st.write(translated_text if translated_text else "-")
+                    translated_text = translate_with_deepseek(selected_phrase, lang)
+                    # Fallback to TRANSLATIONS if API fails
+                    if "Too many requests" in translated_text or "Error" in translated_text:
+                        translated_text = TRANSLATIONS.get(selected_phrase.lower(), {}).get(lang.lower(), "-")
+                    st.write(translated_text)
 
     # Tab 4: Trip Planning (Decision Making)
     with tab4:
