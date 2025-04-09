@@ -133,43 +133,59 @@ class VideoProcessor(VideoProcessorBase):
         
         self.frame_counter = 0
         self.process_interval = 15
-    
+
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
         self.frame_counter += 1
         if self.frame_counter % self.process_interval == 0:
             results = self.model(img)
-            
-            if len(results[0].xyxy) > 0:
-                for det in results[0].xyxy:
-                    x_min, y_min, x_max, y_max, confidence, class_id = det
-                    class_name = self.model.names[int(class_id)]
-                    print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
-                    
-                    if confidence > 0.5:
-                        landmark_key = self.class_to_landmark.get(class_name)
-                        if landmark_key and landmark_key in LANDMARKS_DB:
-                            self.landmark_detected = landmark_key
-                            cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                            label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
-                            cv2.putText(img, label, 
-                                       (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                        else:
-                            cv2.putText(img, f"Unknown: {class_name}", 
-                                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+
+            # Get the first result safely
+            result = results[0]
+
+            if result.boxes is not None and result.boxes.data is not None:
+                detections = result.boxes.data.cpu().numpy()
+
+                if len(detections) > 0:
+                    for det in detections:
+                        x_min, y_min, x_max, y_max, confidence, class_id = det
+                        class_name = self.model.names[int(class_id)]
+                        print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
+
+                        if confidence > 0.5:
+                            landmark_key = self.class_to_landmark.get(class_name)
+                            if landmark_key and landmark_key in LANDMARKS_DB:
+                                self.landmark_detected = landmark_key
+                                cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                                label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
+                                cv2.putText(img, label,
+                                            (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                                            0.9, (36, 255, 12), 2)
+                            else:
+                                cv2.putText(img, f"Unknown: {class_name}",
+                                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                                            0.7, (255, 0, 0), 2)
+                else:
+                    self.landmark_detected = None
+                    cv2.putText(img, "No landmark detected",
+                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.7, (255, 0, 0), 2)
             else:
                 self.landmark_detected = None
-                cv2.putText(img, "No landmark detected", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-        
+                cv2.putText(img, "No landmark detected",
+                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7, (255, 0, 0), 2)
+
         elif self.landmark_detected:
             height, width = img.shape[:2]
-            cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
-            cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
-                       (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-        
+            cv2.rectangle(img, (width // 4, height // 4), (3 * width // 4, 3 * height // 4), (0, 255, 0), 2)
+            cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"],
+                        (width // 4, height // 4 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.9, (36, 255, 12), 2)
+
         return img
+
 
 def process_image(image):
     # Convert the PIL image to a numpy array
