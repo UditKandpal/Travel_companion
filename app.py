@@ -202,7 +202,8 @@ def process_image(image):
     # Run detection
     results = model(img_array)
     
-    # Process the results - access predictions correctly
+    # Process the results
+    # YOLOv5 results structure has changed - use pred instead of xyxy
     predictions = results.pred[0]  # Get predictions for first image
     
     detected = None
