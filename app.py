@@ -172,49 +172,48 @@ class VideoProcessor(VideoProcessorBase):
         return img
 
 def process_image(image):
-    model = YOLO("yolov5su.pt")  # New model
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+    from ultralytics import YOLO
+    import torch
+    import cv2
+    import numpy as np
 
+    # Load model
+    model = YOLO("yolov5su.pt")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[INFO] Using device: {device}")
+
+    # Class to landmark mapping
     class_to_landmark = {
-        "building": "taj_mahal",  # Temporary mapping
+        "building": "taj_mahal",  # Adjust as per your classes
     }
 
-    if isinstance(image, np.ndarray):
-        img_array = image
-    else:
+    # Convert PIL image to numpy array if needed
+    if not isinstance(image, np.ndarray):
         img_array = np.array(image)
 
-    results = model(img_array)
+    results = model(img_array)[0]  # Get first result from the list
     detected = "unknown"
 
-    if results and results[0].boxes is not None and results[0].boxes.xyxy.shape[0] > 0:
-        for box, conf, cls in zip(results[0].boxes.xyxy, results[0].boxes.conf, results[0].boxes.cls):
-            x_min, y_min, x_max, y_max = map(int, box)
-            confidence = float(conf)
-            class_id = int(cls)
-            class_name = model.model.names[class_id]
-            print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
+    # Draw results
+    if results.boxes is not None:
+        for box in results.boxes:
+            x_min, y_min, x_max, y_max = box.xyxy[0].cpu().numpy()
+            confidence = box.conf[0].cpu().numpy()
+            class_id = int(box.cls[0].cpu().numpy())
+            class_name = model.names[class_id]
 
-            if confidence > 0.5:
-                landmark_key = class_to_landmark.get(class_name)
-                if landmark_key and landmark_key in LANDMARKS_DB:
-                    detected = landmark_key
-                    cv2.rectangle(img_array, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-                    label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
-                    cv2.putText(img_array, label,
-                                (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                else:
-                    cv2.putText(img_array, f"Unknown: {class_name}",
-                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                    detected = "unknown"
-    else:
-        height, width = img_array.shape[:2]
-        cv2.putText(img_array, "No landmark detected",
-                    (width // 4, height // 4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
-        detected = "unknown"
+            print(f"[INFO] Detected {class_name} with confidence {confidence:.2f}")
+
+            if class_name in class_to_landmark:
+                detected = class_to_landmark[class_name]
+
+            # Draw rectangle
+            cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (255, 0, 0), 2)
+            cv2.putText(img_array, f"{class_name} {confidence:.2f}", (int(x_min), int(y_min - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
 
     return img_array, detected
+
 
 
     
