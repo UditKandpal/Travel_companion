@@ -190,6 +190,8 @@ class VideoProcessor(VideoProcessorBase):
 def process_image(image):
     # Convert the PIL image to a numpy array
     img_array = np.array(image)
+    img_array = img_array.astype(np.uint8)
+
 
     # Perform inference using your model
     results = model(img_array)
