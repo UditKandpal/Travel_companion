@@ -593,44 +593,43 @@ def app():
         return re.sub(r"^(Translation:|Translated text:)", "", response).strip()
 
     class AudioProcessor(AudioProcessorBase):
-        def __init__(self):
-            self.recognizer = sr.Recognizer()
-            self.audio_frames = []
+    def __init__(self):
+        self.recognizer = sr.Recognizer()
+        self.audio_frames = []
+        self.sample_rate = 48000  # Default WebRTC sample rate, adjust if needed
     
-        def recv(self, frame):
-            audio_data = frame.to_ndarray()
-            self.audio_frames.append(audio_data)
-            return frame
+    def recv(self, frame):
+        """Capture audio frames from WebRTC stream."""
+        audio_data = frame.to_ndarray()
+        self.audio_frames.append(audio_data)
+        return frame
     
-        def process_audio(self):
-            if not self.audio_frames:
-                return "No audio recorded"
+    def process_audio(self):
+        """Process collected audio frames and convert to text."""
+        if not self.audio_frames:
+            return "No audio recorded"
+        
+        try:
+            # Concatenate audio frames into a single array
+            audio_array = np.concatenate(self.audio_frames, axis=0)
+            audio_bytes = audio_array.tobytes()
             
-            try:
-                # Properly concatenate frames using numpy
-                import numpy as np
-                audio_array = np.concatenate(self.audio_frames)
-                # Convert to bytes in proper format
-                audio_bytes = audio_array.tobytes()
-                
-                # Get actual sample rate from your audio source rather than hardcoding
-                # For example, if using a webcam, you might need to check its audio specs
-                sample_rate = 16000  # Common sample rate, adjust as needed
-                
-                audio_file = sr.AudioData(audio_bytes, sample_rate=sample_rate, sample_width=2)
-                
-                # Specify language for better recognition
-                text = self.recognizer.recognize_google(audio_file, language="en-US")
-                return text
-            except sr.UnknownValueError:
-                return "Could not understand audio"
-            except sr.RequestError as e:
-                return f"Could not request results; {str(e)}"
-            except Exception as e:
-                return f"Error: {str(e)}"
-            finally:
-                self.audio_frames = []
+            # Create AudioData object with correct sample rate and width
+            audio_file = sr.AudioData(audio_bytes, sample_rate=self.sample_rate, sample_width=2)
+            
+            # Recognize speech using Google API
+            text = self.recognizer.recognize_google(audio_file, language="en-US")
+            return text
+        except sr.UnknownValueError:
+            return "Could not understand audio"
+        except sr.RequestError as e:
+            return f"Could not request results; {str(e)}"
+        except Exception as e:
+            return f"Error: {str(e)}"
+        finally:
+            self.audio_frames = []  # Clear frames after processing
 
+    
     def translate_with_deepseek(text, target_lang):
         api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"
         model = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free"
@@ -697,15 +696,16 @@ def app():
         st.header("Voice Assistant")
         st.write("Ask questions or get information using your voice (powered by an AI language model)")
         
+        # WebRTC streamer for audio input
         ctx = webrtc_streamer(
             key="voice-assistant",
             audio_processor_factory=AudioProcessor,
             media_stream_constraints={"audio": True, "video": False},
-            async_processing=True
+            async_processing=False  # Set to False for manual processing with button
         )
         
         if ctx.audio_processor:
-            if st.button("Process Audio"):
+            if st.button("Stop and Process Audio"):
                 with st.spinner("Processing..."):
                     voice_text = ctx.audio_processor.process_audio()
                     if voice_text and voice_text not in ["Could not understand audio", "No audio recorded"]:
@@ -724,6 +724,8 @@ def app():
                             st.image("https://via.placeholder.com/600x400?text=Map+of+your+location", caption="Simulated Map")
                     else:
                         st.error(voice_text or "No audio detected.")
+            else:
+                st.write("Recording audio... Click 'Stop and Process Audio' when done.")
         
         # Text input as fallback
         text_query = st.text_input("Or type your question:")
