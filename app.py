@@ -120,140 +120,96 @@ user_preferences = {
     "dietary_restrictions": ["vegetarian options"]
 }
 
-class VideoProcessor(VideoTransformerBase):
-    def _init_(self):
+class VideoProcessor(VideoProcessorBase):
+    def __init__(self):
         self.landmark_detected = None
+        self.model = YOLO("yolov5su.pt")  # Updated to yolov5su.pt
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {self.device}")
         
-        # Load YOLOv5 model
-        print("Loading YOLOv5 model...")
-        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+        self.class_to_landmark = {
+            "building": "taj_mahal",  # Temporary mapping
+        }
         
-        # Frame counter for processing efficiency
         self.frame_counter = 0
-        self.process_interval = 15  # Process every 15 frames
-        
+        self.process_interval = 15
+    
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
-        # Process every Nth frame to improve performance
         self.frame_counter += 1
         if self.frame_counter % self.process_interval == 0:
-            # Run YOLOv5 detection
             results = self.model(img)
             
-            # Process the results
-            predictions = results.pred[0]  # Get predictions for first image
-            
-            if len(predictions) > 0:
-                # Find best detection
-                best_detection = None
-                best_conf = 0
-                
-                for det in predictions:
-                    x_min, y_min, x_max, y_max, conf, cls_id = det.cpu().numpy()
-                    if conf > best_conf:
-                        best_detection = det
-                        best_conf = conf
-                
-                # Process the best detection if confident enough
-                if best_detection is not None and best_conf > 0.4:
-                    x_min, y_min, x_max, y_max, conf, cls_id = best_detection.cpu().numpy()
+            if len(results[0].xyxy) > 0:
+                for det in results[0].xyxy:
+                    x_min, y_min, x_max, y_max, confidence, class_id = det
+                    class_name = self.model.names[int(class_id)]
+                    print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
                     
-                    # Convert to integers for drawing
-                    x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
-                    cls_id = int(cls_id)
-                    
-                    # Get class name
-                    class_name = self.model.names[cls_id]
-                    
-                    # Map to a landmark based on detected object
-                    landmarks = list(LANDMARKS_DB.keys())
-                    landmark_idx = cls_id % len(landmarks)
-                    self.landmark_detected = landmarks[landmark_idx]
-                    
-                    # Draw bounding box
-                    cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-                    
-                    # Add landmark name and confidence
-                    label = f"{LANDMARKS_DB[self.landmark_detected]['name']} ({conf:.2f})"
-                    cv2.putText(img, label, (x_min, y_min - 10), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                    if confidence > 0.5:
+                        landmark_key = self.class_to_landmark.get(class_name)
+                        if landmark_key and landmark_key in LANDMARKS_DB:
+                            self.landmark_detected = landmark_key
+                            cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                            label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
+                            cv2.putText(img, label, 
+                                       (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                        else:
+                            cv2.putText(img, f"Unknown: {class_name}", 
+                                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            else:
+                self.landmark_detected = None
+                cv2.putText(img, "No landmark detected", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
         
-        # If we have a detection but aren't processing this frame, still show the last detection
         elif self.landmark_detected:
             height, width = img.shape[:2]
             cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
             cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
-                      (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                       (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
         
         return img
 
 def process_image(image):
-    """Process uploaded image for landmark detection using YOLOv5"""
-    # Load YOLOv5 model
-    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+    model = YOLO("yolov5su.pt")  # Updated to yolov5su.pt
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
     
-    # Convert to numpy array if not already
-    if not isinstance(image, np.ndarray):
+    class_to_landmark = {
+        "building": "taj_mahal",  # Temporary mapping
+    }
+    
+    if isinstance(image, np.ndarray):
+        img_array = image
+    else:
         img_array = np.array(image)
-    else:
-        img_array = image.copy()
     
-    # Run detection
     results = model(img_array)
+    detected = "unknown"
     
-    # Process the results
-    # YOLOv5 results structure has changed - use pred instead of xyxy
-    predictions = results.pred[0]  # Get predictions for first image
-    
-    detected = None
-    
-    # If we have any detections
-    if len(predictions) > 0:
-        # Find the detection with highest confidence
-        best_detection = None
-        best_conf = 0
-        
-        for det in predictions:
-            x_min, y_min, x_max, y_max, conf, cls_id = det.cpu().numpy()
-            if conf > best_conf:
-                best_detection = det
-                best_conf = conf
-        
-        # Process the best detection
-        if best_detection is not None and best_conf > 0.4:
-            x_min, y_min, x_max, y_max, conf, cls_id = best_detection.cpu().numpy()
+    if len(results[0].xyxy) > 0:
+        for det in results[0].xyxy:
+            x_min, y_min, x_max, y_max, confidence, class_id = det
+            class_name = model.names[int(class_id)]
+            print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
             
-            # Convert to integers for drawing
-            x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
-            cls_id = int(cls_id)
-            
-            # Get class name
-            class_name = model.names[cls_id]
-            
-            # Map to a landmark based on detected object
-            # For demonstration, using a deterministic mapping based on class_id
-            landmarks = list(LANDMARKS_DB.keys())
-            landmark_idx = cls_id % len(landmarks)
-            detected = landmarks[landmark_idx]
-            
-            # Draw bounding box
-            cv2.rectangle(img_array, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-            
-            # Add landmark name and confidence
-            label = f"{LANDMARKS_DB[detected]['name']} ({conf:.2f})"
-            cv2.putText(img_array, label, (x_min, y_min - 10), 
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-            
-            # Add detected class info
-            info_text = f"Detected as: {class_name}"
-            cv2.putText(img_array, info_text, (x_min, y_max + 20), 
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+            if confidence > 0.5:
+                landmark_key = class_to_landmark.get(class_name)
+                if landmark_key and landmark_key in LANDMARKS_DB:
+                    detected = landmark_key
+                    cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
+                    label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
+                    cv2.putText(img_array, label, 
+                               (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                else:
+                    cv2.putText(img_array, f"Unknown: {class_name}", 
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                    detected = "unknown"
     else:
-        # No object detected
         height, width = img_array.shape[:2]
         cv2.putText(img_array, "No landmark detected", 
-                  (width//4, height//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                   (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
         detected = "unknown"
     
     return img_array, detected
@@ -398,7 +354,6 @@ def app():
         st.write("Use your camera to identify landmarks or upload a photo.")
         
         detection_method = st.radio("Choose detection method:", ["Upload Image", "Use Camera"])
-        
         detected_landmark = None
         
         if detection_method == "Upload Image":
@@ -411,70 +366,57 @@ def app():
                 if st.button("Detect Landmarks"):
                     with st.spinner("Processing image..."):
                         processed_img, detected_landmark = process_image(image)
-                        st.image(processed_img, caption=f"Detected: {LANDMARKS_DB[detected_landmark]['name']}", use_column_width=True)
+                        st.image(processed_img, 
+                                caption=f"Detected: {LANDMARKS_DB.get(detected_landmark, {'name': 'Unknown'})['name']}", 
+                                use_column_width=True)
                         
-                        # Show landmark information
-                        st.subheader(LANDMARKS_DB[detected_landmark]['name'])
-                        st.write(LANDMARKS_DB[detected_landmark]['description'])
-                        
-                        # Get personalized recommendations
-                        recommendations = get_recommendations(detected_landmark, user_preferences)
-                        
-                        with st.expander("Learn More"):
-                            st.write(LANDMARKS_DB[detected_landmark]['history'])
-                        
-                        with st.expander("Personalized Recommendations"):
-                            st.subheader("Based on your preferences:")
-                            
-                            if recommendations["restaurant_suggestions"]:
-                                st.write("#### Where to Eat")
-                                for restaurant in recommendations["restaurant_suggestions"]:
-                                    st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
-                                    if restaurant['dietary']:
-                                        st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
-                            
-                            if recommendations["itinerary"]:
-                                st.write("#### Suggested Itinerary")
-                                for i, item in enumerate(recommendations["itinerary"], 1):
-                                    st.write(f"{i}. {item}")
+                        if detected_landmark in LANDMARKS_DB:
+                            st.subheader(LANDMARKS_DB[detected_landmark]['name'])
+                            st.write(LANDMARKS_DB[detected_landmark]['description'])
+                            recommendations = get_recommendations(detected_landmark, user_preferences)
+                            with st.expander("Learn More"):
+                                st.write(LANDMARKS_DB[detected_landmark]['history'])
+                            with st.expander("Personalized Recommendations"):
+                                st.subheader("Based on your preferences:")
+                                if recommendations["restaurant_suggestions"]:
+                                    st.write("#### Where to Eat")
+                                    for restaurant in recommendations["restaurant_suggestions"]:
+                                        st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
+                                        if restaurant['dietary']:
+                                            st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
+                                if recommendations["itinerary"]:
+                                    st.write("#### Suggested Itinerary")
+                                    for i, item in enumerate(recommendations["itinerary"], 1):
+                                        st.write(f"{i}. {item}")
+                        else:
+                            st.write("No known landmark detected.")
         
-        else:  # Use Camera
+        else:
             st.write("Note: Camera access requires permission from your browser")
-            
             ctx = webrtc_streamer(
                 key="landmark-detection",
-                video_processor_factory=VideoProcessor,
+                video_processor_factory=VideoProcessor,  # Updated from video_transformer_factory
                 media_stream_constraints={"video": True, "audio": False},
             )
-            
-            if ctx.video_processor:
-                if ctx.video_processor.landmark_detected:
-                    detected_landmark = ctx.video_processor.landmark_detected
-                    
-                    if detected_landmark:
-                        st.subheader(f"Detected: {LANDMARKS_DB[detected_landmark]['name']}")
-                        st.write(LANDMARKS_DB[detected_landmark]['description'])
-                        
-                        # Get personalized recommendations
-                        recommendations = get_recommendations(detected_landmark, user_preferences)
-                        
-                        with st.expander("Learn More"):
-                            st.write(LANDMARKS_DB[detected_landmark]['history'])
-                        
-                        with st.expander("Personalized Recommendations"):
-                            st.subheader("Based on your preferences:")
-                            
-                            if recommendations["restaurant_suggestions"]:
-                                st.write("#### Where to Eat")
-                                for restaurant in recommendations["restaurant_suggestions"]:
-                                    st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
-                                    if restaurant['dietary']:
-                                        st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
-                            
-                            if recommendations["itinerary"]:
-                                st.write("#### Suggested Itinerary")
-                                for i, item in enumerate(recommendations["itinerary"], 1):
-                                    st.write(f"{i}. {item}")
+            if ctx.video_processor and ctx.video_processor.landmark_detected:
+                detected_landmark = ctx.video_processor.landmark_detected
+                st.subheader(f"Detected: {LANDMARKS_DB[detected_landmark]['name']}")
+                st.write(LANDMARKS_DB[detected_landmark]['description'])
+                recommendations = get_recommendations(detected_landmark, user_preferences)
+                with st.expander("Learn More"):
+                    st.write(LANDMARKS_DB[detected_landmark]['history'])
+                with st.expander("Personalized Recommendations"):
+                    st.subheader("Based on your preferences:")
+                    if recommendations["restaurant_suggestions"]:
+                        st.write("#### Where to Eat")
+                        for restaurant in recommendations["restaurant_suggestions"]:
+                            st.write(f"**{restaurant['name']}** - {restaurant['cuisine']} ({restaurant['price']})")
+                            if restaurant['dietary']:
+                                st.write(f"*Accommodates: {', '.join(restaurant['dietary'])}*")
+                    if recommendations["itinerary"]:
+                        st.write("#### Suggested Itinerary")
+                        for i, item in enumerate(recommendations["itinerary"], 1):
+                            st.write(f"{i}. {item}")
                                     
     import requests
 
@@ -594,41 +536,34 @@ def app():
         return re.sub(r"^(Translation:|Translated text:)", "", response).strip()
 
     class AudioProcessor(AudioProcessorBase):
-    def __init__(self):
-        self.recognizer = sr.Recognizer()
-        self.audio_frames = []
-        self.sample_rate = 48000  # Default WebRTC sample rate, adjust if needed
-    
-    def recv(self, frame):
-        """Capture audio frames from WebRTC stream."""
-        audio_data = frame.to_ndarray()
-        self.audio_frames.append(audio_data)
-        return frame
-    
-    def process_audio(self):
-        """Process collected audio frames and convert to text."""
-        if not self.audio_frames:
-            return "No audio recorded"
+        def __init__(self):
+            self.recognizer = sr.Recognizer()
+            self.audio_frames = []
+            self.sample_rate = 48000  # Default WebRTC sample rate
         
-        try:
-            # Concatenate audio frames into a single array
-            audio_array = np.concatenate(self.audio_frames, axis=0)
-            audio_bytes = audio_array.tobytes()
+        def recv(self, frame):
+            audio_data = frame.to_ndarray()
+            self.audio_frames.append(audio_data)
+            return frame
+        
+        def process_audio(self):
+            if not self.audio_frames:
+                return "No audio recorded"
             
-            # Create AudioData object with correct sample rate and width
-            audio_file = sr.AudioData(audio_bytes, sample_rate=self.sample_rate, sample_width=2)
-            
-            # Recognize speech using Google API
-            text = self.recognizer.recognize_google(audio_file, language="en-US")
-            return text
-        except sr.UnknownValueError:
-            return "Could not understand audio"
-        except sr.RequestError as e:
-            return f"Could not request results; {str(e)}"
-        except Exception as e:
-            return f"Error: {str(e)}"
-        finally:
-            self.audio_frames = []  # Clear frames after processing
+            try:
+                audio_array = np.concatenate(self.audio_frames, axis=0)
+                audio_bytes = audio_array.tobytes()
+                audio_file = sr.AudioData(audio_bytes, sample_rate=self.sample_rate, sample_width=2)
+                text = self.recognizer.recognize_google(audio_file, language="en-US")
+                return text
+            except sr.UnknownValueError:
+                return "Could not understand audio"
+            except sr.RequestError as e:
+                return f"Could not request results; {str(e)}"
+            except Exception as e:
+                return f"Error: {str(e)}"
+            finally:
+                self.audio_frames = []
 
     
     def translate_with_deepseek(text, target_lang):
@@ -697,12 +632,11 @@ def app():
         st.header("Voice Assistant")
         st.write("Ask questions or get information using your voice (powered by an AI language model)")
         
-        # WebRTC streamer for audio input
         ctx = webrtc_streamer(
             key="voice-assistant",
             audio_processor_factory=AudioProcessor,
             media_stream_constraints={"audio": True, "video": False},
-            async_processing=False  # Set to False for manual processing with button
+            async_processing=False
         )
         
         if ctx.audio_processor:
@@ -711,14 +645,10 @@ def app():
                     voice_text = ctx.audio_processor.process_audio()
                     if voice_text and voice_text not in ["Could not understand audio", "No audio recorded"]:
                         st.success(f"You said: {voice_text}")
-                        
-                        # Process the voice command with LLM
                         query = voice_text.lower()
                         raw_response = process_query_with_llm(query)
                         clean_response = clean_llm_response(raw_response, query)
                         st.write("Assistant:", clean_response)
-                        
-                        # Post-process LLM response for specific actions
                         if "translate" in query:
                             st.write("For translations, I’ll need a specific language. Please say something like 'Translate hello to French'.")
                         elif "map" in clean_response.lower() or "location" in clean_response.lower():
