@@ -121,95 +121,138 @@ user_preferences = {
 }
 
 class VideoProcessor(VideoTransformerBase):
-    def __init__(self):
+    def _init_(self):
         self.landmark_detected = None
-        self.model = YOLO("yolov5s.pt")
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Using device: {self.device}")
         
-        self.class_to_landmark = {
-            "building": "taj_mahal",  # Temporary mapping for demo
-        }
+        # Load YOLOv5 model
+        print("Loading YOLOv5 model...")
+        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
         
+        # Frame counter for processing efficiency
         self.frame_counter = 0
-        self.process_interval = 15
-    
+        self.process_interval = 15  # Process every 15 frames
+        
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
+        # Process every Nth frame to improve performance
         self.frame_counter += 1
         if self.frame_counter % self.process_interval == 0:
+            # Run YOLOv5 detection
             results = self.model(img)
             
-            if len(results[0].xyxy) > 0:  # Check if there are detections in the first result
-                for det in results[0].xyxy:
-                    x_min, y_min, x_max, y_max, confidence, class_id = det
-                    class_name = self.model.names[int(class_id)]
-                    print(f"Detected: {class_name}, Confidence: {confidence:.2f}")
+            # Process the results
+            predictions = results.pred[0]  # Get predictions for first image
+            
+            if len(predictions) > 0:
+                # Find best detection
+                best_detection = None
+                best_conf = 0
+                
+                for det in predictions:
+                    x_min, y_min, x_max, y_max, conf, cls_id = det.cpu().numpy()
+                    if conf > best_conf:
+                        best_detection = det
+                        best_conf = conf
+                
+                # Process the best detection if confident enough
+                if best_detection is not None and best_conf > 0.4:
+                    x_min, y_min, x_max, y_max, conf, cls_id = best_detection.cpu().numpy()
                     
-                    if confidence > 0.5:
-                        landmark_key = self.class_to_landmark.get(class_name)
-                        if landmark_key and landmark_key in LANDMARKS_DB:
-                            self.landmark_detected = landmark_key
-                            cv2.rectangle(img, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                            label = f"{LANDMARKS_DB[landmark_key]['name']} ({confidence:.2f})"
-                            cv2.putText(img, label, 
-                                       (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                        else:
-                            cv2.putText(img, f"Unknown: {class_name}", 
-                                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-            else:
-                self.landmark_detected = None
-                cv2.putText(img, "No landmark detected", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                    # Convert to integers for drawing
+                    x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
+                    cls_id = int(cls_id)
+                    
+                    # Get class name
+                    class_name = self.model.names[cls_id]
+                    
+                    # Map to a landmark based on detected object
+                    landmarks = list(LANDMARKS_DB.keys())
+                    landmark_idx = cls_id % len(landmarks)
+                    self.landmark_detected = landmarks[landmark_idx]
+                    
+                    # Draw bounding box
+                    cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                    
+                    # Add landmark name and confidence
+                    label = f"{LANDMARKS_DB[self.landmark_detected]['name']} ({conf:.2f})"
+                    cv2.putText(img, label, (x_min, y_min - 10), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
         
+        # If we have a detection but aren't processing this frame, still show the last detection
         elif self.landmark_detected:
             height, width = img.shape[:2]
             cv2.rectangle(img, (width//4, height//4), (3*width//4, 3*height//4), (0, 255, 0), 2)
             cv2.putText(img, LANDMARKS_DB[self.landmark_detected]["name"], 
-                       (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                      (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
         
         return img
 
 def process_image(image):
-    model = YOLO("yolov5s.pt")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+    """Process uploaded image for landmark detection using YOLOv5"""
+    # Load YOLOv5 model
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
     
-    class_to_landmark = {
-        "building": "taj_mahal",  # Temporary mapping
-    }
-    
-    if isinstance(image, np.ndarray):
-        img_array = image
-    else:
+    # Convert to numpy array if not already
+    if not isinstance(image, np.ndarray):
         img_array = np.array(image)
-    
-    results = model(img_array)
-    detected = "unknown"
-    
-    if len(results[0].xyxy) > 0:  # Check if there are detections in the first result
-        for det in results[0].xyxy:
-            x_min, y_min, x_max, y_max, confidence, class_id = det
-            class_name = model.names[int(class_id)]
-            print(f"Image detected: {class_name}, Confidence: {confidence:.2f}")
-            
-            if confidence > 0.5:
-                landmark_key = class_to_landmark.get(class_name)
-                if landmark_key and landmark_key in LANDMARKS_DB:
-                    detected = landmark_key
-                    cv2.rectangle(img_array, (int(x_min), int(y_min)), (int(x_max), int(y_max)), (0, 255, 0), 2)
-                    label = f"{LANDMARKS_DB[detected]['name']} ({confidence:.2f})"
-                    cv2.putText(img_array, label, 
-                               (int(x_min), int(y_min) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-                else:
-                    cv2.putText(img_array, f"Unknown: {class_name}", 
-                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                    detected = "unknown"
     else:
+        img_array = image.copy()
+    
+    # Run detection
+    results = model(img_array)
+    
+    # Process the results - access predictions correctly
+    predictions = results.pred[0]  # Get predictions for first image
+    
+    detected = None
+    
+    # If we have any detections
+    if len(predictions) > 0:
+        # Find the detection with highest confidence
+        best_detection = None
+        best_conf = 0
+        
+        for det in predictions:
+            x_min, y_min, x_max, y_max, conf, cls_id = det.cpu().numpy()
+            if conf > best_conf:
+                best_detection = det
+                best_conf = conf
+        
+        # Process the best detection
+        if best_detection is not None and best_conf > 0.4:
+            x_min, y_min, x_max, y_max, conf, cls_id = best_detection.cpu().numpy()
+            
+            # Convert to integers for drawing
+            x_min, y_min, x_max, y_max = int(x_min), int(y_min), int(x_max), int(y_max)
+            cls_id = int(cls_id)
+            
+            # Get class name
+            class_name = model.names[cls_id]
+            
+            # Map to a landmark based on detected object
+            # For demonstration, using a deterministic mapping based on class_id
+            landmarks = list(LANDMARKS_DB.keys())
+            landmark_idx = cls_id % len(landmarks)
+            detected = landmarks[landmark_idx]
+            
+            # Draw bounding box
+            cv2.rectangle(img_array, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+            
+            # Add landmark name and confidence
+            label = f"{LANDMARKS_DB[detected]['name']} ({conf:.2f})"
+            cv2.putText(img_array, label, (x_min, y_min - 10), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+            
+            # Add detected class info
+            info_text = f"Detected as: {class_name}"
+            cv2.putText(img_array, info_text, (x_min, y_max + 20), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+    else:
+        # No object detected
         height, width = img_array.shape[:2]
         cv2.putText(img_array, "No landmark detected", 
-                   (width//4, height//4 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+                  (width//4, height//2), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         detected = "unknown"
     
     return img_array, detected
@@ -293,13 +336,19 @@ def get_recommendations(landmark_key, preferences=None):
 
 def listen_to_voice():
     recognizer = sr.Recognizer()
+    # Increase energy threshold for better noise handling
+    recognizer.energy_threshold = 4000
+    
     with sr.Microphone() as source:
         st.write("Adjusting for ambient noise... Please wait.")
-        recognizer.adjust_for_ambient_noise(source, duration=1)  # Adjust for background noise
+        # Increase duration for better noise adjustment
+        recognizer.adjust_for_ambient_noise(source, duration=2)
         st.write("Listening...")
-        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)  # 5s timeout, 10s max phrase
+        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+    
     try:
-        text = recognizer.recognize_google(audio)
+        # Specify language for better recognition
+        text = recognizer.recognize_google(audio, language="en-US")
         return text
     except sr.UnknownValueError:
         return "Could not understand audio"
