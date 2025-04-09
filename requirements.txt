@@ -53,7 +53,6 @@ SpeechRecognition
 pyttsx3
 openai
 requests
-pyaudio==0.2.11 --only-binary :all:
 
 
 
