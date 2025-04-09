@@ -121,70 +121,125 @@ user_preferences = {
 }
 
 class VideoProcessor(VideoTransformerBase):
-    def __init__(self):
-        self.landmark_detected = None
-        # Load pretrained YOLOv8 (replace with v5 if preferred but v8 is latest)
-        self.model = YOLO("yolov8n.pt")  # small model for speed
-        self.model.fuse()  # fuse layers for faster inference
-
+    def _init_(self):
+        self.monument_detected = None
+        
+        # Option 1: Load a custom YOLOv5 model fine-tuned on monuments
+        # You would need to train this model or find a pre-trained one
+        # self.model = torch.hub.load('ultralytics/yolov5', 'custom', path='path/to/monument_model.pt')
+        
+        # Option 2: Use a general YOLOv5 model and filter for building-like classes
+        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+        self.model.conf = 0.4  # Lower confidence threshold for detection
+        
+        # Classes from COCO that might represent monuments or buildings
+        # 11: 'stop sign', 12: 'parking meter', 13: 'bench'
+        # 63: 'dining table' (might detect large flat surfaces)
+        # These are just examples; actual monument detection would need a custom model
+        self.building_classes = [11, 12, 13, 63]
+        
+        # Database of monuments with coordinates and information
+        # In a real application, this would be more comprehensive
+        self.MONUMENT_DB = {
+            "Eiffel Tower": {
+                "name": "Eiffel Tower",
+                "location": "Paris, France",
+                "info": "Iconic iron tower built in 1889"
+            },
+            "Statue of Liberty": {
+                "name": "Statue of Liberty",
+                "location": "New York, USA",
+                "info": "Neoclassical monument gifted by France"
+            },
+            "Taj Mahal": {
+                "name": "Taj Mahal",
+                "location": "Agra, India",
+                "info": "Ivory-white marble mausoleum"
+            },
+            "Colosseum": {
+                "name": "Colosseum",
+                "location": "Rome, Italy",
+                "info": "Ancient Roman amphitheater"
+            },
+            "Great Wall": {
+                "name": "Great Wall of China",
+                "location": "China",
+                "info": "Series of fortifications built across northern China"
+            }
+        }
+        
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model.to(self.device)
+        
+    def match_monument(self, img):
+        """
+        In a real application, you'd use feature matching or a dedicated
+        landmark recognition model here. This is a placeholder.
+        """
+        import random
+        monuments = list(self.MONUMENT_DB.keys())
+        # In real app: use a monument classifier or feature matching
+        return random.choice(monuments)
+        
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
         
-        # Run detection
-        results = self.model(img, verbose=False)
-
+        # Run YOLOv5 detection
+        results = self.model(img)
+        
         # Process results
-        annotated_frame = img.copy()
-        for result in results:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                conf = box.conf[0]
-                cls = int(box.cls[0])
-                label = self.model.names[cls]
-
-                # Draw rectangle and label
-                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(annotated_frame, f"{label} {conf:.2f}", (x1, y1 - 10),
+        detections = results.xyxy[0].cpu().numpy()
+        
+        monument_detected = False
+        
+        # Draw bounding boxes for detected objects
+        for detection in detections:
+            x1, y1, x2, y2, conf, cls = detection
+            class_id = int(cls)
+            
+            # For Option 1 (custom model): just display all detections
+            # For Option 2: filter for building-like classes
+            if class_id in self.building_classes:
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                
+                # Attempt to identify the specific monument
+                if not monument_detected:
+                    monument_name = self.match_monument(img[y1:y2, x1:x2])
+                    self.monument_detected = monument_name
+                    monument_detected = True
+                
+                # Get monument info
+                monument_info = self.MONUMENT_DB.get(self.monument_detected, {"name": "Unknown Monument"})
+                
+                # Draw rectangle and monument info
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(img, monument_info["name"], (x1, y1 - 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
+                cv2.putText(img, monument_info.get("location", ""), (x1, y1 - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (36, 255, 12), 2)
+        
+        return img
 
-                # Store the detected label
-                self.landmark_detected = label
-
-        return annotated_frame
-
-# Single image processor
 def process_image(image):
-    """Process uploaded image for landmark detection using YOLO"""
+    """Process uploaded image for monument detection"""
     # Convert PIL image to numpy array if needed
     if not isinstance(image, np.ndarray):
         img_array = np.array(image)
     else:
         img_array = image
-
-    # Load YOLO model
-    model = YOLO("yolov8n.pt")
-    model.fuse()
-
-    # Run detection
-    results = model(img_array, verbose=False)
-
-    # Draw bounding boxes and return the first detected object
-    detected = None
-    annotated_image = img_array.copy()
-    for result in results:
-        for box in result.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            conf = box.conf[0]
-            cls = int(box.cls[0])
-            label = model.names[cls]
-            detected = label
-
-            # Draw rectangle and label
-            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(annotated_image, f"{label} {conf:.2f}", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-
-    return annotated_image, detected
+    
+    # Create detector instance
+    detector = MonumentDetector()
+    
+    # Create a dummy frame object with the image
+    class Frame:
+        def to_ndarray(self, format):
+            return img_array
+    
+    # Use the transform method to process the image
+    processed_img = detector.transform(Frame())
+    
+    return processed_img, detector.monument_detected
 
 
 
