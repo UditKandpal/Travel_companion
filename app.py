@@ -557,12 +557,21 @@ def app():
             if not self.audio_frames:
                 return "No audio recorded"
             
-            # Convert audio frames to a format compatible with speech_recognition
-            audio_data = b''.join([frame.tobytes() for frame in self.audio_frames])
-            audio_file = sr.AudioData(audio_data, sample_rate=48000, sample_width=2)  # Adjust sample rate if needed
-            
             try:
-                text = self.recognizer.recognize_google(audio_file)
+                # Properly concatenate frames using numpy
+                import numpy as np
+                audio_array = np.concatenate(self.audio_frames)
+                # Convert to bytes in proper format
+                audio_bytes = audio_array.tobytes()
+                
+                # Get actual sample rate from your audio source rather than hardcoding
+                # For example, if using a webcam, you might need to check its audio specs
+                sample_rate = 16000  # Common sample rate, adjust as needed
+                
+                audio_file = sr.AudioData(audio_bytes, sample_rate=sample_rate, sample_width=2)
+                
+                # Specify language for better recognition
+                text = self.recognizer.recognize_google(audio_file, language="en-US")
                 return text
             except sr.UnknownValueError:
                 return "Could not understand audio"
@@ -571,7 +580,7 @@ def app():
             except Exception as e:
                 return f"Error: {str(e)}"
             finally:
-                self.audio_frames = []  # Clear frames after processing
+                self.audio_frames = []
 
     def translate_with_deepseek(text, target_lang):
         api_key = "tgp_v1_lxVgdEmpgQ-0OfEqehsdB9QRIbZ9lnxcEBSOOfrNbIY"
